@@ -6,11 +6,13 @@ import gradio as gr
 from dotenv import load_dotenv
 
 from autovideo.creator import CreatorPipeline
+from autovideo.preflight import format_report, run_preflight
 from autovideo.project_store import ProjectStore
 
 
 load_dotenv()
 DEFAULT_PROJECTS_DIR = Path("outputs/projects")
+FIRST_EPISODE_STORYBOARD = Path("examples/episode_01_storyboard.json")
 
 
 def _safe_name(value: str) -> str:
@@ -34,6 +36,11 @@ def _project_updates(project: dict):
     )
 
 
+def run_environment_check():
+    report = format_report(run_preflight())
+    return f"```text\n{report}\n```"
+
+
 def create_project(source: str, project_name: str):
     if not source.strip():
         raise gr.Error("请输入故事、小说片段或内容大纲。")
@@ -48,6 +55,24 @@ def create_project(source: str, project_name: str):
         scene_update,
         motion_update,
         "已生成 Storyboard。先审核剧情、角色、台词和镜头 Prompt，再保存并生成素材。",
+    )
+
+
+def bootstrap_first_episode(project_name: str):
+    if not FIRST_EPISODE_STORYBOARD.exists():
+        raise gr.Error(f"找不到模板：{FIRST_EPISODE_STORYBOARD}")
+    project = json.loads(FIRST_EPISODE_STORYBOARD.read_text(encoding="utf-8"))
+    name = _safe_name(project_name or "tide-eye-episode-01")
+    project_dir = DEFAULT_PROJECTS_DIR / name
+    ProjectStore(project_dir).save_storyboard(project)
+    char_update, scene_update, motion_update = _project_updates(project)
+    return (
+        str(project_dir),
+        json.dumps(project, ensure_ascii=False, indent=2),
+        char_update,
+        scene_update,
+        motion_update,
+        "已载入《潮汐之眼》人工精修 Storyboard。可直接审核并保存，不必先调用 LLM。",
     )
 
 
@@ -150,11 +175,14 @@ def render_final(project_dir: str, bgm_path: str, bgm_volume: float):
 with gr.Blocks(title="AutoVideo Creator Review") as demo:
     gr.Markdown(
         "# AutoVideo Creator Review\n"
-        "按 **Storyboard → 角色定妆 → 关键帧 → I2V 镜头 → 配音/后期 → 成片** 分阶段审核。"
+        "按 **环境检查 → Storyboard → 角色定妆 → 关键帧 → I2V 镜头 → 配音/后期 → 成片** 分阶段审核。"
         "默认候选 1 会作为临时选择，但建议逐镜头人工确认后再最终渲染。"
     )
 
-    project_dir = gr.Textbox(label="项目目录", value="outputs/projects/episode-01")
+    with gr.Row():
+        preflight_btn = gr.Button("运行环境检查")
+        project_dir = gr.Textbox(label="项目目录", value="outputs/projects/tide-eye-episode-01")
+    preflight_output = gr.Markdown()
     status = gr.Markdown()
 
     with gr.Tab("1. Storyboard"):
@@ -163,10 +191,11 @@ with gr.Blocks(title="AutoVideo Creator Review") as demo:
             lines=12,
             placeholder="例如：原创海上冒险短篇，主角在暴风雨后发现一座失落岛屿……",
         )
-        project_name = gr.Textbox(label="项目名", value="episode-01")
+        project_name = gr.Textbox(label="项目名", value="tide-eye-episode-01")
         with gr.Row():
-            create_btn = gr.Button("创建新项目", variant="primary")
-            load_btn = gr.Button("加载项目")
+            bootstrap_btn = gr.Button("载入《潮汐之眼》精修模板", variant="primary")
+            create_btn = gr.Button("让 LLM 创建新 Storyboard")
+            load_btn = gr.Button("加载已有项目")
             save_storyboard_btn = gr.Button("保存 Storyboard 修改")
         storyboard = gr.Code(
             label="Storyboard JSON（可直接修改台词、角色、画面 Prompt、运镜 Prompt）",
@@ -211,6 +240,12 @@ with gr.Blocks(title="AutoVideo Creator Review") as demo:
         render_btn = gr.Button("渲染最终成片", variant="primary")
         final_video = gr.Video(label="最终 9:16 成片")
 
+    preflight_btn.click(run_environment_check, outputs=[preflight_output])
+    bootstrap_btn.click(
+        bootstrap_first_episode,
+        inputs=[project_name],
+        outputs=[project_dir, storyboard, character_id, scene_id, motion_scene_id, status],
+    )
     create_btn.click(
         create_project,
         inputs=[source, project_name],

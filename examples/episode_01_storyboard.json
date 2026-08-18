@@ -1,0 +1,126 @@
+{
+  "title": "潮汐之眼",
+  "hook": "暴风中心出现不可能存在的金色光柱，失控的罗盘突然指向那里。",
+  "style_prompt": "premium cinematic anime feature-film look, hand-painted storm atmosphere, realistic fabric and water physics, deep navy and cyan-gray storm palette with restrained blue-gold ancient glow, dramatic volumetric lighting, detailed faces, clean linework, 9:16 vertical composition, consistent original character design, no text, no logo",
+  "negative_prompt": "low quality, cheap cartoon, flat lighting, blurry face, deformed hands, extra fingers, extra limbs, duplicated person, inconsistent costume, identity drift, text, logo, watermark, oversaturated neon, fisheye distortion",
+  "characters": [
+    {
+      "id": "char_lulan",
+      "name": "陆岚",
+      "visual_bible": "20-year-old East Asian male sailor, slim athletic build, short slightly messy black hair, amber eyes, straight brows, defined youthful face, dark crimson cropped storm coat over charcoal shirt, old brown leather bracers, brass compass hanging at the waist, dark trousers, weathered boots; calm restrained expression; the crimson coat and brass compass must remain identical in every scene",
+      "voice": "young_male"
+    },
+    {
+      "id": "char_eve",
+      "name": "伊芙",
+      "visual_bible": "20-year-old East Asian female navigator, slim build, long silver-gray hair tied in a low ponytail, blue-gray eyes, refined oval face, dark navy waterproof cloak with matte texture, charcoal inner clothing, crescent-shaped metal pendant at the collar, dark gloves; composed observant expression; the navy cloak, low ponytail and crescent pendant must remain identical in every scene",
+      "voice": "young_female"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene_01",
+      "shot_type": "extreme close-up to medium reveal",
+      "continuity": "Night storm. Lu Lan wears the same dark crimson storm coat and brass compass. Eve is nearby but mostly off-frame. Ship deck is wet and pitching violently.",
+      "narration": "黑潮海域，从来没有人见过风暴的中心。",
+      "dialogue_lines": [
+        {"character_id": "char_lulan", "text": "等等……罗盘在指什么？"}
+      ],
+      "character_ids": ["char_lulan"],
+      "image_prompt": "Extreme close-up of a soaked brass compass spinning wildly in a young sailor's gloved hand on a storm-lashed wooden deck; rack-focus composition reveals Lu Lan's amber eyes and dark crimson storm coat behind it; a thin impossible golden pillar of light pierces the black storm far ahead; violent rain, sea spray, lightning backlight, immediate visual hook",
+      "motion_prompt": "Start macro on the compass needle spinning rapidly, strong hand-held ship vibration, rain streaks across lens; rack focus to Lu Lan's eyes as the needle abruptly slows, then a short push-in while the distant golden light appears between waves. Keep face and clothing unchanged; no scene transformation.",
+      "duration_hint": 6
+    },
+    {
+      "id": "scene_02",
+      "shot_type": "two-shot medium close-up",
+      "continuity": "Same storm, same ship deck, same wet costumes. Golden light remains ahead-right. Eve's crescent pendant is visible.",
+      "narration": "海图上，那里只有一片空白。",
+      "dialogue_lines": [
+        {"character_id": "char_eve", "text": "陆岚，前面没有岛。连暗礁都没有。"},
+        {"character_id": "char_lulan", "text": "可它在叫我们过去。"}
+      ],
+      "character_ids": ["char_lulan", "char_eve"],
+      "image_prompt": "Medium close two-shot on a pitching sailboat deck: Eve in a dark navy waterproof cloak holds a soaked nautical chart against the wind while Lu Lan in a dark crimson coat grips the rail; her silver-gray low ponytail and crescent pendant visible; both stare toward the same distant golden light; storm-blue palette, practical deck lantern glow, cinematic facial detail",
+      "motion_prompt": "Subtle lateral camera move across the two characters, cloak and hair reacting naturally to wind, chart edges fluttering, ship rocking; Eve points at the blank map then looks toward the light; Lu Lan turns only his eyes and head slightly. Preserve exact faces, costumes, props and deck layout.",
+      "duration_hint": 7
+    },
+    {
+      "id": "scene_03",
+      "shot_type": "wide establishing reveal",
+      "continuity": "Same boat and storm. Characters appear small in foreground. The city palette introduces blue-gold light for the first time.",
+      "narration": "下一秒，海面开始发光。",
+      "dialogue_lines": [
+        {"character_id": "char_eve", "text": "那不是岛……是一座城。"}
+      ],
+      "character_ids": ["char_lulan", "char_eve"],
+      "image_prompt": "Epic vertical wide shot from behind Lu Lan and Eve on the small sailboat as an ancient half-submerged city rises through the storm ahead, black stone towers and broken arches glowing with restrained blue-gold energy under the ocean surface, enormous waves framing the reveal, tiny human silhouettes for scale, premium animated feature composition, atmospheric depth",
+      "motion_prompt": "Slow cinematic crane-up and push forward from behind the two characters, water streaming from newly exposed stone, distant structures rising only slightly and naturally, lightning illuminating clouds, boat continuing to pitch. Do not redesign the characters or city between frames.",
+      "duration_hint": 7
+    },
+    {
+      "id": "scene_04",
+      "shot_type": "overhead wide to underwater threat",
+      "continuity": "Boat is now closer to the city. Storm still active. Same blue-gold glow beneath water.",
+      "narration": "可真正醒来的东西，还在水下。",
+      "dialogue_lines": [
+        {"character_id": "char_lulan", "text": "伊芙，看下面。"}
+      ],
+      "character_ids": ["char_lulan", "char_eve"],
+      "image_prompt": "High overhead cinematic shot of the tiny sailboat crossing dark teal water near the glowing ruins; beneath the surface a colossal circular shadow with faint concentric blue-gold mechanical markings surrounds the boat, suggesting an ancient machine or creature far larger than the vessel; Lu Lan and Eve visible on deck looking down; storm foam and rain",
+      "motion_prompt": "Camera drifts slowly downward and slightly rotates around the boat; underwater concentric lights awaken one ring at a time beneath the surface while the shadow remains mostly concealed; waves and foam move naturally. No monster reveal, no sudden geometry changes, preserve boat and character continuity.",
+      "duration_hint": 6
+    },
+    {
+      "id": "scene_05",
+      "shot_type": "insert close-up then reaction",
+      "continuity": "Same storm and boat. Lu Lan's brass compass is wet and scratched exactly as before. City tower is visible ahead.",
+      "narration": "疯狂旋转的指针，第一次停了下来。",
+      "dialogue_lines": [
+        {"character_id": "char_lulan", "text": "它指向那座塔。"},
+        {"character_id": "char_eve", "text": "不是我们在找它。"}
+      ],
+      "character_ids": ["char_lulan", "char_eve"],
+      "image_prompt": "Cinematic insert close-up of Lu Lan's wet scratched brass compass now perfectly still, needle pointing toward a single blue-gold tower in the blurred background; Lu Lan's crimson sleeve and leather bracer frame the compass, Eve's navy silhouette behind him; shallow depth of field, strong visual direction, rain droplets and metallic detail",
+      "motion_prompt": "Begin on the motionless needle, slow focus pull from compass to the distant tower, then a minimal camera slide revealing Eve behind Lu Lan; rain continues but the compass never moves. Preserve the exact compass design and wardrobe.",
+      "duration_hint": 6
+    },
+    {
+      "id": "scene_06",
+      "shot_type": "medium close-up silence beat",
+      "continuity": "Characters remain in same positions and costumes. For one second the storm freezes unnaturally; tower glow intensifies but color palette remains controlled.",
+      "narration": "高塔亮起的瞬间，整片风暴静止了一秒。",
+      "dialogue_lines": [
+        {"character_id": "char_eve", "text": "是它把我们引来的。"}
+      ],
+      "character_ids": ["char_lulan", "char_eve"],
+      "image_prompt": "Medium close-up of Eve and Lu Lan on the deck during an impossible instant of silence: rain droplets suspended in mid-air, cloak and hair almost frozen, both faces lit by a distant blue-gold tower; Eve looks toward Lu Lan with sudden realization while Lu Lan keeps his eyes on the tower; premium cinematic anime facial acting, restrained expression",
+      "motion_prompt": "Very slow push-in. At first normal storm motion, then wind and rain visibly decelerate into an eerie near-freeze for about one second while only the tower light brightens; Eve turns her eyes toward Lu Lan and speaks softly. Avoid face morphing, lip exaggeration or costume changes.",
+      "duration_hint": 6
+    },
+    {
+      "id": "scene_07",
+      "shot_type": "POV approach / low-angle tower",
+      "continuity": "Storm begins moving again behind them. Boat approaches the central tower through partially submerged ruins. Same city geometry and blue-gold lighting language.",
+      "narration": "他们已经没有回头的方向。",
+      "dialogue_lines": [
+        {"character_id": "char_lulan", "text": "那就看看，它想让我们看什么。"}
+      ],
+      "character_ids": ["char_lulan", "char_eve"],
+      "image_prompt": "Low-angle vertical cinematic shot from the bow as Lu Lan stands foreground in his dark crimson coat, Eve just behind in navy cloak, both facing a colossal ancient tower rising from flooded ruins; blue-gold lines pulse upward along the tower, storm wall curling behind the city, strong leading lines, heroic but ominous composition, original anime feature-film look",
+      "motion_prompt": "Boat glides slowly forward through flooded ruins, camera pushes toward the tower from a low angle, coat and cloak move gently, blue-gold light travels upward along fixed architectural grooves, storm rotates slowly in the far background. Preserve character identity and tower geometry.",
+      "duration_hint": 7
+    },
+    {
+      "id": "scene_08",
+      "shot_type": "tower-top close-up / final sting",
+      "continuity": "No characters required in frame. Same tower material and blue-gold energy established earlier. End on black immediately after the eye opens.",
+      "narration": "而高塔的尽头，也终于睁开了眼睛。",
+      "dialogue_lines": [],
+      "character_ids": [],
+      "image_prompt": "Extreme cinematic close-up of the top of the ancient black-stone tower in storm darkness; layered mechanical stone plates form a sealed circular aperture surrounded by faint blue-gold runes, rain running across ancient surfaces, ominous symmetrical composition, immense scale, premium anime film detail, no recognizable existing IP design",
+      "motion_prompt": "Slow controlled push-in. The circular stone plates unlock with tiny mechanical movements, blue-gold light leaks through the seams, then one enormous mechanical eye opens slowly at the center and holds for a beat; immediate hard cut to black. No extra creatures, no camera shake, no redesign.",
+      "duration_hint": 6
+    }
+  ]
+}
