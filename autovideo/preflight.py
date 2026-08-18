@@ -53,7 +53,7 @@ def run_preflight() -> list[Check]:
         _writable_outputs(),
     ]
 
-    llm_provider = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
+    llm_provider = os.getenv("LLM_PROVIDER", "doubao").strip().lower()
     checks.append(
         Check(
             "LLM_PROVIDER",
@@ -82,7 +82,7 @@ def run_preflight() -> list[Check]:
                 Check(
                     "Gemini video billing",
                     True,
-                    "Gemini/Veo API video generation is paid-tier; use MEDIA_PROVIDER=doubao or comfy for a no-card/free-quota start",
+                    "Veo API video generation requires Gemini paid-tier access",
                     required=False,
                 ),
             ]
@@ -96,7 +96,7 @@ def run_preflight() -> list[Check]:
                 Check(
                     "Doubao free quota",
                     True,
-                    "free trial quotas depend on your Ark account/model activation; verify remaining quota in Volcengine console",
+                    "trial quota depends on Ark account/model activation and remaining allowance",
                     required=False,
                 ),
             ]
