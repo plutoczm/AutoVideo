@@ -2,21 +2,50 @@
 
 This runbook is for producing the first real AutoVideo short, **《潮汐之眼》**, instead of only validating the code path.
 
-## 1. Configure the environment
+## 1. Configure a free-first environment
 
-Copy `.env.example` to `.env`, then configure the LLM/media credentials you intend to use.
+Copy `.env.example` to `.env`.
 
-For the default cloud path, the required values are:
+Recommended first run:
 
 ```text
-LLM_API_KEY=...
-MEDIA_PROVIDER=gemini
+# Storyboard LLM: Gemini free tier
+LLM_PROVIDER=gemini
 GEMINI_API_KEY=...
-GEMINI_IMAGE_MODEL=...
-GEMINI_VIDEO_MODEL=...
+GEMINI_LLM_MODEL=gemini-3.6-flash
+
+# Images + I2V: Doubao trial quotas
+MEDIA_PROVIDER=doubao
+ARK_API_KEY=...
+DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
+DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
+
+# No extra project API key for first-pass speech
+TTS_PROVIDER=edge
 ```
 
-Keep `TTS_PROVIDER=edge` for the first visual production pass. Upgrade voice quality only after the visuals and pacing are acceptable.
+The first episode also includes a hand-authored storyboard, so you can bootstrap it without making an LLM request at all. The LLM provider is only required when generating a new storyboard from prose.
+
+Volcengine trial quotas depend on your account, model activation and remaining quota. Check the Ark console before batch generation. Gemini/Veo video generation is not the free-first route because the Gemini API video models currently require paid-tier access.
+
+Alternative all-Doubao setup:
+
+```text
+LLM_PROVIDER=doubao
+MEDIA_PROVIDER=doubao
+ARK_API_KEY=...
+DOUBAO_LLM_MODEL=doubao-seed-2-1-turbo-260628
+```
+
+Optional current DeepSeek fallback:
+
+```text
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=...
+DEEPSEEK_MODEL=deepseek-v4-flash
+```
+
+Do not use the retired `deepseek-chat` / `deepseek-reasoner` model names.
 
 ## 2. Run production preflight
 
@@ -24,16 +53,16 @@ Keep `TTS_PROVIDER=edge` for the first visual production pass. Upgrade voice qua
 python -m autovideo.preflight
 ```
 
-Do not start paid image/video generation until all required checks are `PASS`.
-
 The preflight verifies:
 
 - `ffmpeg` and `ffprobe` are on `PATH`;
 - the output directory is writable;
-- LLM configuration exists;
+- the selected LLM provider has the required configuration;
 - the selected media provider has the required configuration;
 - local ComfyUI connectivity/workflow files when `MEDIA_PROVIDER=comfy`;
 - high-quality HTTP TTS configuration when enabled.
+
+If you are loading the hand-authored first-episode storyboard and do not intend to call an LLM, you can still fill the selected LLM key later; media generation itself is controlled independently by `MEDIA_PROVIDER`.
 
 ## 3. Start the creator review UI
 
@@ -41,7 +70,7 @@ The preflight verifies:
 python review_app.py
 ```
 
-Click **运行环境检查** once more from the UI, then click **载入《潮汐之眼》精修模板**.
+Click **运行环境检查**, then click **载入《潮汐之眼》精修模板**.
 
 The template comes from:
 
@@ -76,7 +105,7 @@ Prioritize these shots first because they define the visual standard for the epi
 3. `scene_06` — suspended-rain realization beat;
 4. `scene_08` — mechanical-eye ending.
 
-If these four shots do not look publishable, do not spend video-generation budget on the remaining scenes yet.
+If these four shots do not look publishable, do not spend video-generation quota on the remaining scenes yet.
 
 Check every keyframe for:
 
@@ -86,6 +115,8 @@ Check every keyframe for:
 - readable focal point on a phone screen;
 - shot-size variety across adjacent scenes;
 - no text/watermark/deformed limbs.
+
+When using `MEDIA_PROVIDER=doubao`, each generated keyframe stores a small provider URL sidecar for Seedance I2V. If the provider URL has expired by the time you animate it, regenerate that approved keyframe before requesting motion.
 
 ## 6. I2V pass
 
