@@ -34,14 +34,14 @@ For public demos, use original characters/stories or material you have permissio
 
 ## Provider architecture
 
-LLM and media providers are configured independently. This lets you use a free/cheap LLM while choosing a different image/video backend.
+LLM and media providers are configured independently. This lets you use one provider end to end or mix providers for cost/quality comparisons.
 
 ### LLM providers
 
 `LLM_PROVIDER` supports:
 
-- `gemini` — Gemini API, default model `gemini-3.6-flash`;
 - `doubao` — Volcengine Ark Responses API, default model `doubao-seed-2-1-turbo-260628`;
+- `gemini` — Gemini API, default model `gemini-3.6-flash`;
 - `deepseek` — DeepSeek API, current default model `deepseek-v4-flash`.
 
 Legacy DeepSeek model names `deepseek-chat` / `deepseek-reasoner` are no longer used by this project.
@@ -67,7 +67,25 @@ Model IDs live in `.env`, so providers can be upgraded without rewriting the orc
 
 ## Free-first configuration
 
-The repository defaults to a **free-first trial setup** rather than assuming paid Veo rendering:
+The repository defaults to the simplest current trial path: **one Volcengine Ark key for LLM + image + video**, plus Edge-TTS for speech.
+
+```text
+LLM_PROVIDER=doubao
+MEDIA_PROVIDER=doubao
+
+ARK_API_KEY=your_volcengine_ark_key
+DOUBAO_LLM_MODEL=doubao-seed-2-1-turbo-260628
+DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
+DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
+
+TTS_PROVIDER=edge
+```
+
+This is the recommended first-run setup because Volcengine currently advertises trial quotas for Doubao Seed 2.1, Seedream and Seedance. The same `ARK_API_KEY` is used by all three adapters. Free quotas/model activation are account-specific and can change, so check the Ark console before batch generation.
+
+### Free Gemini LLM + Doubao media
+
+Gemini is also supported as the storyboard LLM. Gemini 3.6 Flash currently has a Gemini API free tier for text input/output:
 
 ```text
 LLM_PROVIDER=gemini
@@ -76,36 +94,9 @@ GEMINI_LLM_MODEL=gemini-3.6-flash
 
 MEDIA_PROVIDER=doubao
 ARK_API_KEY=your_volcengine_ark_key
-DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
-DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
-
-TTS_PROVIDER=edge
 ```
 
-Why this combination:
-
-- Gemini 3.6 Flash currently has a Gemini API free tier for text input/output;
-- Volcengine currently advertises trial quotas for Doubao Seed 2.1, Seedream and Seedance models;
-- Gemini/Veo API video generation is paid-tier, so Veo remains an optional media backend rather than the default for a free first run;
-- Edge-TTS needs no project API key and remains the first-pass speech fallback.
-
-Free quotas and model activation are provider/account specific and can change. Always check the provider console before batch generation.
-
-### One-key Doubao configuration
-
-If you prefer one provider for planning + media, use:
-
-```text
-LLM_PROVIDER=doubao
-MEDIA_PROVIDER=doubao
-ARK_API_KEY=your_volcengine_ark_key
-DOUBAO_LLM_MODEL=doubao-seed-2-1-turbo-260628
-DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
-DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
-TTS_PROVIDER=edge
-```
-
-The same Ark API key is used by the Doubao LLM, Seedream and Seedance adapters.
+This uses Gemini only for story planning while still using the Doubao trial path for image/video generation.
 
 ### Optional DeepSeek fallback
 
@@ -132,7 +123,7 @@ GEMINI_VIDEO_RESOLUTION=720p
 GEMINI_VIDEO_DURATION=8
 ```
 
-This path is useful when you want to compare Gemini/Veo quality, but Veo API video generation currently requires the paid tier.
+The Gemini image/video path remains supported for quality comparison, but Veo API video generation currently requires a paid Gemini API tier; it is therefore not the default free-first media path.
 
 ### Local no-API media path
 
@@ -218,13 +209,7 @@ examples/episode_01_story.txt
 examples/episode_01_storyboard.json
 ```
 
-See:
-
-```text
-docs/FIRST_EPISODE.md
-```
-
-for the production runbook and acceptance criteria.
+See `docs/FIRST_EPISODE.md` for the production runbook and acceptance criteria.
 
 ## Installation
 
@@ -248,6 +233,7 @@ Then:
 
 ```bash
 cp .env.example .env
+# Add ARK_API_KEY for the default free-first path.
 python -m autovideo.preflight
 python review_app.py
 ```
@@ -259,7 +245,7 @@ Do not commit `.env` or API keys to GitHub.
 ```text
 AutoVideo/
 ├── autovideo/
-│   ├── llm.py              # Gemini / Doubao / DeepSeek storyboard providers
+│   ├── llm.py              # Doubao / Gemini / DeepSeek storyboard providers
 │   ├── planner.py          # story -> characters + storyboard + dialogue
 │   ├── project_store.py    # project assets + approvals
 │   ├── creator.py          # staged candidate/review/render pipeline
