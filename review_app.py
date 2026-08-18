@@ -47,7 +47,7 @@ def create_project(source: str, project_name: str):
         char_update,
         scene_update,
         motion_update,
-        "已生成 Storyboard。先审核剧情和角色设定，再生成候选图。",
+        "已生成 Storyboard。先审核剧情、角色、台词和镜头 Prompt，再保存并生成素材。",
     )
 
 
@@ -62,6 +62,20 @@ def load_project(project_dir: str):
         motion_update,
         "项目已加载。",
     )
+
+
+def save_storyboard(project_dir: str, storyboard_text: str):
+    if not project_dir.strip():
+        raise gr.Error("请先创建或加载项目。")
+    try:
+        payload = json.loads(storyboard_text)
+    except json.JSONDecodeError as exc:
+        raise gr.Error(f"Storyboard JSON 格式错误：{exc}") from exc
+    if not payload.get("scenes"):
+        raise gr.Error("Storyboard 必须包含 scenes。")
+    ProjectStore(project_dir.strip()).save_storyboard(payload)
+    char_update, scene_update, motion_update = _project_updates(payload)
+    return char_update, scene_update, motion_update, "Storyboard 修改已保存。"
 
 
 def generate_characters(project_dir: str, character_id: str, count: int):
@@ -125,15 +139,18 @@ def approve_motion(project_dir: str, scene_id: str, selected_path: str):
     return str(path), f"已锁定 {scene_id} 动态镜头：{path.name}"
 
 
-def render_final(project_dir: str):
-    path = _pipeline(project_dir).render_episode()
+def render_final(project_dir: str, bgm_path: str, bgm_volume: float):
+    bgm = bgm_path.strip() if bgm_path else None
+    if bgm and not Path(bgm).exists():
+        raise gr.Error(f"BGM 文件不存在：{bgm}")
+    path = _pipeline(project_dir).render_episode(bgm_path=bgm, bgm_volume=float(bgm_volume))
     return str(path), f"成片已输出：{path}"
 
 
 with gr.Blocks(title="AutoVideo Creator Review") as demo:
     gr.Markdown(
         "# AutoVideo Creator Review\n"
-        "按 **Storyboard → 角色定妆 → 关键帧 → I2V 镜头 → 成片** 分阶段审核。"
+        "按 **Storyboard → 角色定妆 → 关键帧 → I2V 镜头 → 配音/后期 → 成片** 分阶段审核。"
         "默认候选 1 会作为临时选择，但建议逐镜头人工确认后再最终渲染。"
     )
 
@@ -150,7 +167,12 @@ with gr.Blocks(title="AutoVideo Creator Review") as demo:
         with gr.Row():
             create_btn = gr.Button("创建新项目", variant="primary")
             load_btn = gr.Button("加载项目")
-        storyboard = gr.Code(label="Storyboard JSON", language="json", lines=28)
+            save_storyboard_btn = gr.Button("保存 Storyboard 修改")
+        storyboard = gr.Code(
+            label="Storyboard JSON（可直接修改台词、角色、画面 Prompt、运镜 Prompt）",
+            language="json",
+            lines=28,
+        )
 
     with gr.Tab("2. Character Bible"):
         character_id = gr.Dropdown(label="角色")
@@ -180,7 +202,12 @@ with gr.Blocks(title="AutoVideo Creator Review") as demo:
         approved_motion = gr.Video(label="当前确认镜头")
 
     with gr.Tab("5. Final Render"):
-        gr.Markdown("确认所有角色、关键帧和动态镜头后，再进行 TTS、字幕、音轨混合和最终合成。")
+        gr.Markdown(
+            "最终阶段会按 Storyboard 中的 narration + dialogue_lines 分角色生成 TTS，"
+            "生成更细粒度字幕，并把可选 BGM 混到人声和原生环境声下方。"
+        )
+        bgm_path = gr.Textbox(label="BGM 文件路径（可留空）", placeholder="assets/bgm/adventure.mp3")
+        bgm_volume = gr.Slider(0.0, 0.5, value=0.12, step=0.01, label="BGM 音量")
         render_btn = gr.Button("渲染最终成片", variant="primary")
         final_video = gr.Video(label="最终 9:16 成片")
 
@@ -193,6 +220,11 @@ with gr.Blocks(title="AutoVideo Creator Review") as demo:
         load_project,
         inputs=[project_dir],
         outputs=[storyboard, character_id, scene_id, motion_scene_id, status],
+    )
+    save_storyboard_btn.click(
+        save_storyboard,
+        inputs=[project_dir, storyboard],
+        outputs=[character_id, scene_id, motion_scene_id, status],
     )
     generate_character_btn.click(
         generate_characters,
@@ -225,7 +257,11 @@ with gr.Blocks(title="AutoVideo Creator Review") as demo:
         inputs=[project_dir, motion_scene_id, motion_choice],
         outputs=[approved_motion, status],
     )
-    render_btn.click(render_final, inputs=[project_dir], outputs=[final_video, status])
+    render_btn.click(
+        render_final,
+        inputs=[project_dir, bgm_path, bgm_volume],
+        outputs=[final_video, status],
+    )
 
 
 if __name__ == "__main__":
