@@ -5,7 +5,9 @@ from typing import Any
 
 from autovideo.comfy import ComfyUIRunner
 from autovideo.composer import (
+    add_bgm,
     concat_and_subtitle,
+    concat_audio,
     image_to_motion_fallback,
     media_duration,
     render_scene,
@@ -249,7 +251,35 @@ class CreatorPipeline:
         self.store.select_motion(scene_id, path)
         return path
 
-    def render_episode(self) -> Path:
+    @staticmethod
+    def _speech_segments(scene: dict[str, Any], characters: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
+        """Return ordered (voice_role, text) segments for one scene."""
+        segments: list[tuple[str, str]] = []
+        narration = str(scene.get("narration", "")).strip()
+        if narration:
+            segments.append(("narrator", narration))
+
+        dialogue_lines = scene.get("dialogue_lines") or []
+        for line in dialogue_lines:
+            if not isinstance(line, dict):
+                continue
+            character_id = str(line.get("character_id", "")).strip()
+            text = str(line.get("text", "")).strip()
+            if not text:
+                continue
+            voice = characters.get(character_id, {}).get("voice", "narrator")
+            segments.append((voice, text))
+
+        # Backward compatibility with storyboards created before dialogue_lines existed.
+        if not dialogue_lines:
+            legacy = str(scene.get("dialogue", "")).strip()
+            if legacy:
+                ids = scene.get("character_ids") or []
+                voice = characters.get(ids[0], {}).get("voice", "narrator") if ids else "narrator"
+                segments.append((voice, legacy))
+        return segments
+
+    def render_episode(self, bgm_path: str | Path | None = None, bgm_volume: float = 0.12) -> Path:
         project = self.store.load_storyboard()
         rendered_scenes: list[Path] = []
         subtitles: list[tuple[str, float]] = []
@@ -261,29 +291,39 @@ class CreatorPipeline:
             if not motion or not motion.exists():
                 raise RuntimeError(f"Scene {scene_id} has no approved motion candidate")
 
-            narration = scene.get("narration", "").strip()
-            dialogue = scene.get("dialogue", "").strip()
-            spoken_text = "\n".join(x for x in (narration, dialogue) if x)
-            audio = self.store.audio_dir / f"{scene_id}.mp3"
-            rendered = self.store.scenes_dir / f"{scene_id}.mp4"
+            segments = self._speech_segments(scene, characters)
+            if not segments:
+                raise RuntimeError(f"Scene {scene_id} has no narration or dialogue")
 
-            ids = scene.get("character_ids", [])
-            voice = "narrator"
-            if ids and ids[0] in characters:
-                voice = characters[ids[0]].get("voice", "narrator")
-            generate_tts(spoken_text, audio, voice)
-            duration = media_duration(audio)
+            segment_dir = self.store.audio_dir / scene_id
+            segment_dir.mkdir(parents=True, exist_ok=True)
+            segment_paths: list[Path] = []
+            for seg_index, (voice, text) in enumerate(segments, start=1):
+                segment_path = segment_dir / f"segment_{seg_index:02d}.mp3"
+                generate_tts(text, segment_path, voice)
+                duration = media_duration(segment_path)
+                segment_paths.append(segment_path)
+                subtitles.append((text, duration))
+
+            scene_audio = self.store.audio_dir / f"{scene_id}.mp3"
+            concat_audio(segment_paths, scene_audio)
+            rendered = self.store.scenes_dir / f"{scene_id}.mp4"
             render_scene(
                 motion,
-                audio,
+                scene_audio,
                 rendered,
                 width=self.cfg.width,
                 height=self.cfg.height,
             )
             rendered_scenes.append(rendered)
-            subtitles.append((spoken_text, duration))
             print(f"rendered {index}/{len(project['scenes'])}: {scene_id}")
 
+        no_bgm = self.store.final_dir / "final_story_no_bgm.mp4"
+        concat_and_subtitle(rendered_scenes, subtitles, no_bgm)
+
         final = self.store.final_dir / "final_story.mp4"
-        concat_and_subtitle(rendered_scenes, subtitles, final)
+        if bgm_path and str(bgm_path).strip():
+            add_bgm(no_bgm, bgm_path, final, volume=float(bgm_volume))
+        else:
+            final.write_bytes(no_bgm.read_bytes())
         return final
