@@ -12,6 +12,7 @@ from autovideo.composer import (
     media_duration,
     render_scene,
 )
+from autovideo.gemini_media import GeminiMediaProvider
 from autovideo.planner import character_prompt, plan_story, scene_prompt
 from autovideo.tts import generate_tts
 
@@ -35,13 +36,16 @@ def voice_for_scene(project: dict, scene: dict) -> str:
 
 
 def build_project(source: str, output_dir: Path) -> Path:
+    media_provider = os.getenv("MEDIA_PROVIDER", "gemini").lower()
     image_workflow = os.getenv("COMFY_IMAGE_WORKFLOW", "workflows/image_api.json")
     video_workflow = os.getenv("COMFY_VIDEO_WORKFLOW", "workflows/video_api.json")
     width = int(os.getenv("VIDEO_WIDTH", "1080"))
     height = int(os.getenv("VIDEO_HEIGHT", "1920"))
     seed = int(os.getenv("BASE_SEED", "42"))
 
-    if not Path(image_workflow).exists():
+    if media_provider not in {"gemini", "comfy"}:
+        raise RuntimeError("MEDIA_PROVIDER must be gemini or comfy")
+    if media_provider == "comfy" and not Path(image_workflow).exists():
         raise RuntimeError(
             f"Missing image workflow: {image_workflow}. Export an API-format ComfyUI workflow first; "
             "see workflows/README.md."
@@ -61,26 +65,32 @@ def build_project(source: str, output_dir: Path) -> Path:
         json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    comfy = ComfyUIRunner()
+    comfy = ComfyUIRunner() if media_provider == "comfy" else None
+    gemini = GeminiMediaProvider() if media_provider == "gemini" else None
     reference_images: dict[str, Path] = {}
 
     print(f"[1/4] Generating {len(project.get('characters', []))} character references...")
     for index, character in enumerate(project.get("characters", []), start=1):
         ref_path = refs_dir / f"{character['id']}.png"
-        comfy.run(
-            image_workflow,
-            ref_path,
-            prompt=character_prompt(character, project["style_prompt"]),
-            negative_prompt=project.get("negative_prompt", ""),
-            width=width,
-            height=height,
-            seed=seed + index,
-        )
+        prompt = character_prompt(character, project["style_prompt"])
+        if gemini:
+            gemini.generate_image(prompt, ref_path)
+        else:
+            assert comfy is not None
+            comfy.run(
+                image_workflow,
+                ref_path,
+                prompt=prompt,
+                negative_prompt=project.get("negative_prompt", ""),
+                width=width,
+                height=height,
+                seed=seed + index,
+            )
         reference_images[character["id"]] = ref_path
 
     rendered_scenes: list[Path] = []
     subtitles: list[tuple[str, float]] = []
-    has_video_workflow = Path(video_workflow).exists()
+    has_video_workflow = media_provider == "comfy" and Path(video_workflow).exists()
 
     print(f"[2/4] Rendering {len(project['scenes'])} story scenes...")
     for index, scene in enumerate(project["scenes"], start=1):
@@ -91,18 +101,23 @@ def build_project(source: str, output_dir: Path) -> Path:
         rendered = scenes_dir / f"{scene_id}.mp4"
 
         ids = scene.get("character_ids", [])
-        reference = reference_images.get(ids[0]) if ids else None
+        refs = [reference_images[cid] for cid in ids if cid in reference_images]
+        prompt = scene_prompt(project, scene)
 
-        comfy.run(
-            image_workflow,
-            keyframe,
-            prompt=scene_prompt(project, scene),
-            negative_prompt=project.get("negative_prompt", ""),
-            reference_image=reference,
-            width=width,
-            height=height,
-            seed=seed + 100 + index,
-        )
+        if gemini:
+            gemini.generate_image(prompt, keyframe, reference_images=refs)
+        else:
+            assert comfy is not None
+            comfy.run(
+                image_workflow,
+                keyframe,
+                prompt=prompt,
+                negative_prompt=project.get("negative_prompt", ""),
+                reference_image=refs[0] if refs else None,
+                width=width,
+                height=height,
+                seed=seed + 100 + index,
+            )
 
         narration = scene.get("narration", "").strip()
         dialogue = scene.get("dialogue", "").strip()
@@ -110,11 +125,15 @@ def build_project(source: str, output_dir: Path) -> Path:
         generate_tts(spoken_text, audio, voice_for_scene(project, scene))
         audio_duration = media_duration(audio)
 
-        if has_video_workflow:
+        motion_prompt = scene.get("motion_prompt", "cinematic subtle motion")
+        if gemini:
+            gemini.generate_video(motion_prompt, keyframe, motion)
+        elif has_video_workflow:
+            assert comfy is not None
             comfy.run(
                 video_workflow,
                 motion,
-                prompt=scene.get("motion_prompt", "cinematic subtle motion"),
+                prompt=motion_prompt,
                 negative_prompt=project.get("negative_prompt", ""),
                 input_image=keyframe,
                 width=width,
@@ -122,7 +141,13 @@ def build_project(source: str, output_dir: Path) -> Path:
                 seed=seed + 200 + index,
             )
         else:
-            image_to_motion_fallback(keyframe, motion, duration=audio_duration, width=width, height=height)
+            image_to_motion_fallback(
+                keyframe,
+                motion,
+                duration=audio_duration,
+                width=width,
+                height=height,
+            )
 
         render_scene(motion, audio, rendered, width=width, height=height)
         rendered_scenes.append(rendered)
@@ -141,7 +166,10 @@ def build_project(source: str, output_dir: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="AutoVideo Studio: idea/novel -> storyboard -> consistent keyframes -> I2V -> TTS -> short film"
+        description=(
+            "AutoVideo Studio: idea/novel -> storyboard -> consistent character keyframes "
+            "-> image-to-video -> controlled TTS -> vertical short film"
+        )
     )
     parser.add_argument(
         "source",
