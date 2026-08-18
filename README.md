@@ -13,7 +13,7 @@ Story / novel excerpt / content idea
         ↓
 LLM story adaptation
         ↓
-Character bible + voice roles
+Character bible + stable voice roles
         ↓
 Storyboard / shot plan
         ↓
@@ -23,9 +23,11 @@ Storyboard / shot plan
         ↓
 2x image-to-video shots → human approval
         ↓
-TTS + native ambience mix
+Narration + per-character dialogue TTS
         ↓
-Subtitles + FFmpeg composition
+Native ambience + optional BGM mix
+        ↓
+Line-level subtitles + FFmpeg composition
         ↓
 9:16 short film
 ```
@@ -39,14 +41,17 @@ High-quality story video generation is mostly an iteration problem. A fully auto
 The current creator workflow supports:
 
 - persistent project state under one episode directory;
-- storyboard JSON review before media generation;
+- editable storyboard JSON before expensive media generation;
 - multiple character-sheet candidates per character;
 - approved reference images reused across scene generation;
 - multiple keyframe candidates per scene;
 - up to three selected character references supplied to supported image providers;
 - multiple I2V candidates per scene;
 - scene-level rerendering instead of restarting the whole episode;
-- final narration/dialogue TTS, subtitle generation and FFmpeg composition.
+- structured `dialogue_lines` with a stable voice role per character;
+- finer subtitle timing from narration/dialogue segments;
+- native ambience preservation plus optional user-supplied BGM;
+- final H.264/AAC vertical MP4 composition.
 
 ## Current architecture
 
@@ -57,10 +62,24 @@ The current creator workflow supports:
 - original character definitions;
 - stable face / hair / wardrobe / color descriptions;
 - voice roles;
+- a short opening hook;
 - 6-10 short-form scenes;
 - keyframe prompts;
 - motion/camera prompts;
-- narration and dialogue.
+- concise narration;
+- per-character dialogue lines.
+
+Example dialogue representation:
+
+```json
+{
+  "narration": "暴风中心突然亮起一道金光。",
+  "dialogue_lines": [
+    {"character_id": "char_1", "text": "那不是闪电。"},
+    {"character_id": "char_2", "text": "海图上根本没有那座岛。"}
+  ]
+}
+```
 
 ### Creator project state
 
@@ -80,8 +99,12 @@ outputs/projects/episode-01/
 ├── motion/
 │   └── scene_01/
 ├── audio/
+│   └── scene_01/
+│       ├── segment_01.mp3
+│       └── segment_02.mp3
 ├── scenes/
 └── final/
+    ├── final_story_no_bgm.mp4
     └── final_story.mp4
 ```
 
@@ -113,8 +136,10 @@ The exact identity-control mechanism depends on the selected provider. Gemini ca
 
 - Edge-TTS is the default no-cost fallback.
 - `TTS_PROVIDER=http` can target a higher-quality CosyVoice/F5-TTS-compatible service.
-- Character voice roles remain stable in the storyboard.
+- Narration uses the narrator voice role; each `dialogue_lines` item resolves to the corresponding character voice.
+- Scene speech is synthesized in segments, concatenated, and reused for subtitle timing.
 - If a generated video contains native ambience/effects, FFmpeg keeps it quietly underneath the controlled voice track.
+- Final render can optionally loop a creator-supplied BGM track under the finished voice/ambience mix.
 
 ## Creator Review UI
 
@@ -126,13 +151,36 @@ python review_app.py
 
 The UI has five stages:
 
-1. **Storyboard** — create/load the episode and inspect structured story JSON.
+1. **Storyboard** — create/load the episode, directly edit JSON, then save revised dialogue/prompts before media generation.
 2. **Character Bible** — generate multiple character candidates and lock the chosen reference.
 3. **Storyboard Keyframes** — generate multiple scene compositions using approved character references.
 4. **I2V Shot Review** — generate and preview multiple motion candidates for the approved keyframe.
-5. **Final Render** — run TTS, mix audio, burn subtitles and produce the final vertical MP4.
+5. **Final Render** — run per-character TTS, preserve native ambience, optionally add BGM, burn subtitles and produce the final vertical MP4.
 
 The first candidate is stored as a temporary default so rapid experiments can continue, but publishable work should explicitly review each important character and scene.
+
+## First episode brief
+
+A ready-to-use original episode brief is included at:
+
+```text
+examples/episode_01_story.txt
+```
+
+It describes a 45-60 second original cinematic-anime sea adventure called **《潮汐之眼》**, including character constraints, hook, plot beats, visual palette, sound requirements and continuity rules. It is intentionally original so it can be used as a public portfolio/creator test without relying on a named franchise.
+
+Recommended first production run:
+
+```text
+1. python review_app.py
+2. paste examples/episode_01_story.txt into Storyboard input
+3. generate Storyboard and manually tighten dialogue/pacing
+4. approve one character identity per role
+5. approve one keyframe per scene
+6. generate 2 I2V candidates for important scenes
+7. add a licensed/owned BGM file if desired
+8. render final_story.mp4
+```
 
 ## Quick CLI
 
@@ -204,16 +252,18 @@ See `workflows/README.md` for the API-format token convention.
 ```text
 AutoVideo/
 ├── autovideo/
-│   ├── planner.py          # story -> characters + storyboard
+│   ├── planner.py          # story -> characters + storyboard + dialogue lines
 │   ├── project_store.py    # project assets + approvals
 │   ├── creator.py          # staged candidate/review/render pipeline
 │   ├── gemini_media.py     # Gemini image + Veo I2V provider
 │   ├── comfy.py            # model-agnostic ComfyUI adapter
 │   ├── tts.py              # Edge-TTS / HTTP high-quality TTS adapter
-│   └── composer.py         # FFmpeg normalization, audio mix and subtitles
+│   └── composer.py         # FFmpeg audio, subtitles, BGM and final composition
+├── examples/
+│   └── episode_01_story.txt
 ├── workflows/              # optional local image/video workflows
-├── review_app.py            # creator review UI
-├── studio.py                # quick automatic CLI
+├── review_app.py           # creator review UI
+├── studio.py               # quick automatic CLI
 ├── requirements.txt
 ├── .env.example
 ├── UPSTREAM.md
@@ -224,13 +274,13 @@ AutoVideo/
 
 The next work should improve actual publishable output rather than add unrelated infrastructure:
 
-- line-level multi-speaker dialogue instead of one voice role per scene;
-- BGM/SFX generation and automatic ducking/loudness normalization;
+- direct high-quality multi-speaker CosyVoice integration instead of only the generic HTTP adapter;
+- SFX library/generation and automatic ducking/loudness normalization;
 - richer shot grammar (close-up / medium / wide / POV / insert / establishing shot);
 - explicit continuity memory for props, damage, weather and time-of-day;
 - automatic visual quality checks to flag identity drift and malformed frames before I2V;
 - alternate video providers so the same keyframe can be compared across multiple models;
-- project/episode metadata for a repeatable series workflow.
+- episode metadata and reusable cast assets for a repeatable series workflow.
 
 ## Legacy demo
 
