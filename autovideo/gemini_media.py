@@ -16,15 +16,15 @@ class GeminiMediaProvider:
     """
 
     def __init__(self) -> None:
-        api_key = os.getenv("GEMINI_API_KEY", "")
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY is required for MEDIA_PROVIDER=gemini")
         self.client = genai.Client(api_key=api_key)
         self.image_model = os.getenv(
-            "GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image-preview"
+            "GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image"
         )
         self.video_model = os.getenv(
-            "GEMINI_VIDEO_MODEL", "veo-3.1-fast-generate-preview"
+            "GEMINI_VIDEO_MODEL", "veo-3.1-lite-generate-preview"
         )
         self.video_resolution = os.getenv("GEMINI_VIDEO_RESOLUTION", "720p")
         self.video_duration = int(os.getenv("GEMINI_VIDEO_DURATION", "8"))
