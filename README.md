@@ -1,66 +1,97 @@
 # AutoVideo
 
-A beginner-oriented AIGC short-video generation project.
+A beginner-oriented AIGC short-video generation tool for learning the complete `content -> image -> TTS -> video` workflow.
 
-The current baseline is imported from the MIT-licensed open-source project `vasanthgitt/GenAI-Video_Generation` and kept intentionally simple so it can be used as a learning project and modified step by step.
+The project is intentionally kept small. It does not use a recent text-to-video model. Instead, it combines mature components that are easy to understand and explain: LLM scene generation, Stable Diffusion image generation, Edge-TTS narration and MoviePy/FFmpeg video composition.
 
-## Current workflow
+## Workflow
 
 ```text
-Topic / content point
+Topic / content points
         ↓
-LLM content generation
+LLM generates 5 short scenes
         ↓
-BART summarization / scene text split
+Narration + image prompt for each scene
         ↓
-Stable Diffusion image generation
+Stable Diffusion generates scene images
         ↓
-gTTS voiceover generation
+Edge-TTS generates narration audio
         ↓
-MoviePy image + audio + subtitle composition
+Image duration follows audio duration
         ↓
-final_video.mp4
+MoviePy / FFmpeg adds subtitles and joins scenes
+        ↓
+9:16 MP4 short video
 ```
 
-## Features
+## Current features
 
-- Generate content from a text topic.
-- Summarize the generated content into shorter scene text.
-- Generate one image for each scene with Stable Diffusion.
-- Convert scene text into speech with TTS.
-- Match each generated image to its audio duration.
-- Add simple subtitles to each scene.
-- Concatenate scenes into a final MP4 video.
-- Provide a small Gradio interface for entering the topic and previewing the result.
+- Enter a topic or several content points in a small Gradio interface.
+- Generate five short scenes with narration and image prompts.
+- Generate one Stable Diffusion image for each scene.
+- Generate Chinese or English voiceover with Edge-TTS.
+- Match each image scene to the duration of its narration audio.
+- Add simple subtitles.
+- Compose a vertical `720 x 1280` short video with MoviePy/FFmpeg.
+- Export the final result to `outputs/final_video.mp4`.
 
 ## Technology stack
 
 - Python
-- Google Generative AI (`gemini-pro` in the imported baseline)
-- Hugging Face Transformers / BART
+- Google Generative AI (`gemini-1.5-flash` by default, configurable)
 - Stable Diffusion v1.4 through Hugging Face Inference API
-- gTTS
+- Edge-TTS
 - MoviePy / FFmpeg
 - Gradio
 
-The baseline deliberately uses an older, straightforward generation pipeline rather than a recent text-to-video model. The main learning goal is to understand the complete `content -> image -> TTS -> video` workflow.
+The goal is not to build a production video platform. This is a compact learning project for understanding how text generation, image generation, TTS and traditional video processing can be connected end to end.
 
 ## Installation
 
 ```bash
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-MoviePy also requires FFmpeg to be available on the system.
+FFmpeg must also be installed and available from the command line.
 
 ## Configuration
 
-The imported baseline currently contains placeholder fields for:
+Copy the example environment file:
 
-- Google Generative AI API key
-- Hugging Face inference token
+```bash
+cp .env.example .env
+```
 
-Before running, replace the empty placeholders in `video.py` with your own credentials. A later refactor should move these values to environment variables instead of keeping them in source code.
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then configure:
+
+```text
+GOOGLE_API_KEY=your_google_api_key
+HF_TOKEN=your_huggingface_token
+```
+
+Optional settings:
+
+```text
+GEMINI_MODEL=gemini-1.5-flash
+EDGE_TTS_VOICE=zh-CN-XiaoxiaoNeural
+SUBTITLE_FONT=
+```
+
+`SUBTITLE_FONT` can be set when the default MoviePy/ImageMagick font cannot correctly render Chinese subtitles.
 
 ## Run
 
@@ -68,24 +99,50 @@ Before running, replace the empty placeholders in `video.py` with your own crede
 python video.py
 ```
 
-Open the Gradio page, enter a topic such as `Explain Photosynthesis`, and the program will generate scene images, narration, subtitles and a final video.
+Example input:
 
-## Project status
+```text
+为什么天空是蓝色的？用一分钟做一个简单科普。
+```
 
-This is the initial upstream baseline. Planned personal modifications can include:
+The application generates five scenes and saves their images/audio under `outputs/`, with the final video at:
 
-- replacing hard-coded credentials with `.env` configuration;
-- changing gTTS to Edge-TTS;
-- simplifying the content-generation stage;
-- improving scene splitting and subtitle timing;
-- supporting vertical 9:16 short-video output;
-- cleaning temporary output directories and adding basic error handling.
+```text
+outputs/final_video.mp4
+```
+
+## Project structure
+
+```text
+AutoVideo/
+├── video.py            # complete beginner-friendly generation pipeline
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── LICENSE
+├── UPSTREAM.md
+└── README.md
+```
+
+The code deliberately stays in one main Python file so the complete flow is easy to follow before later refactoring.
+
+## Changes from the initial upstream baseline
+
+This repository started from the MIT-licensed `vasanthgitt/GenAI-Video_Generation` project. The current version keeps the original learning idea while making a few lightweight changes:
+
+- changed `gTTS` to `Edge-TTS`;
+- moved API credentials from source code to `.env`;
+- simplified the original BART summarization stage into direct scene generation;
+- generates narration and an image prompt for each scene;
+- added configurable Chinese TTS voice;
+- added vertical 9:16 short-video output;
+- moved generated files into a single `outputs/` directory.
 
 ## Open-source provenance
 
-This repository currently contains code derived from:
+This repository contains code derived from:
 
-- `vasanthgitt/GenAI-Video_Generation`
+- Upstream: `vasanthgitt/GenAI-Video_Generation`
 - Original license: MIT
 - Original copyright: Copyright (c) 2024 vasanth
 
