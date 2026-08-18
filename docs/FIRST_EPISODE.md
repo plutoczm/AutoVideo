@@ -6,36 +6,36 @@ This runbook is for producing the first real AutoVideo short, **《潮汐之眼�
 
 Copy `.env.example` to `.env`.
 
-Recommended first run:
-
-```text
-# Storyboard LLM: Gemini free tier
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=...
-GEMINI_LLM_MODEL=gemini-3.6-flash
-
-# Images + I2V: Doubao trial quotas
-MEDIA_PROVIDER=doubao
-ARK_API_KEY=...
-DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
-DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
-
-# No extra project API key for first-pass speech
-TTS_PROVIDER=edge
-```
-
-The first episode also includes a hand-authored storyboard, so you can bootstrap it without making an LLM request at all. The LLM provider is only required when generating a new storyboard from prose.
-
-Volcengine trial quotas depend on your account, model activation and remaining quota. Check the Ark console before batch generation. Gemini/Veo video generation is not the free-first route because the Gemini API video models currently require paid-tier access.
-
-Alternative all-Doubao setup:
+Recommended first run uses one Volcengine Ark key for storyboard planning, Seedream images and Seedance video:
 
 ```text
 LLM_PROVIDER=doubao
 MEDIA_PROVIDER=doubao
+
 ARK_API_KEY=...
 DOUBAO_LLM_MODEL=doubao-seed-2-1-turbo-260628
+DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
+DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
+
+TTS_PROVIDER=edge
 ```
+
+Volcengine currently advertises trial quotas for these model families, but actual availability depends on your account, model activation and remaining quota. Check the Ark console before batch generation.
+
+The first episode also includes a hand-authored storyboard, so you can bootstrap it without making an LLM request at all.
+
+If you want Gemini as the free storyboard LLM while still using Doubao media:
+
+```text
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=...
+GEMINI_LLM_MODEL=gemini-3.6-flash
+
+MEDIA_PROVIDER=doubao
+ARK_API_KEY=...
+```
+
+Gemini/Veo video generation is not the free-first route because Veo API video models currently require paid-tier access.
 
 Optional current DeepSeek fallback:
 
@@ -61,8 +61,6 @@ The preflight verifies:
 - the selected media provider has the required configuration;
 - local ComfyUI connectivity/workflow files when `MEDIA_PROVIDER=comfy`;
 - high-quality HTTP TTS configuration when enabled.
-
-If you are loading the hand-authored first-episode storyboard and do not intend to call an LLM, you can still fill the selected LLM key later; media generation itself is controlled independently by `MEDIA_PROVIDER`.
 
 ## 3. Start the creator review UI
 
@@ -116,7 +114,7 @@ Check every keyframe for:
 - shot-size variety across adjacent scenes;
 - no text/watermark/deformed limbs.
 
-When using `MEDIA_PROVIDER=doubao`, each generated keyframe stores a small provider URL sidecar for Seedance I2V. If the provider URL has expired by the time you animate it, regenerate that approved keyframe before requesting motion.
+When using `MEDIA_PROVIDER=doubao`, each generated keyframe stores a provider URL sidecar for Seedance I2V. If the provider URL has expired by the time you animate it, regenerate that approved keyframe before requesting motion.
 
 ## 6. I2V pass
 
