@@ -1,4 +1,3 @@
-import json
 import os
 from typing import Any
 
@@ -68,7 +67,7 @@ def _doubao_json(system_prompt: str, user_prompt: str) -> str:
 
 
 def _deepseek_json(system_prompt: str, user_prompt: str) -> str:
-    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip() or os.getenv("LLM_API_KEY", "").strip()
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY is required for LLM_PROVIDER=deepseek")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
@@ -92,7 +91,7 @@ def _deepseek_json(system_prompt: str, user_prompt: str) -> str:
 
 
 def generate_json(system_prompt: str, user_prompt: str) -> str:
-    provider = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
+    provider = os.getenv("LLM_PROVIDER", "doubao").strip().lower()
     if provider == "gemini":
         return _gemini_json(system_prompt, user_prompt)
     if provider == "doubao":
