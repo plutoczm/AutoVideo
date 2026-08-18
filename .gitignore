@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Generated content
+audio/
+images/
+videos/
+final_video.mp4
+summary_text.txt
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
