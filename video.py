@@ -1,132 +1,227 @@
-import gradio as gr
-from transformers import pipeline
-import google.generativeai as genai
-import re
-import os
-import requests
+import asyncio
 import io
+import os
+import re
+import shutil
+from pathlib import Path
+
+import edge_tts
+import google.generativeai as genai
+import gradio as gr
+import requests
+from dotenv import load_dotenv
 from PIL import Image
-from gtts import gTTS
-from moviepy.editor import *
-from textwrap import wrap
-
-# Generative model setup
-API_KEY = ''
-genai.configure(api_key=API_KEY)  # Replace with your actual API key
-generation_config = {"temperature": 0.9, "max_output_tokens": 2048, "top_k": 1, "top_p": 1}
-
-# Use the appropriate generative model, e.g., "gemini-pro" (replace with the actual model name)
-model = genai.GenerativeModel("gemini-pro", generation_config=generation_config)
-
-# Summarization model setup
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-
-API_URL = "https://api-inference.huggingface.co/models/CompVis/stable-diffusion-v1-4"
-headers = {"Authorization": " "}
-
-# Function to remove asterisks from text
-def remove_asterisks(text):
-    return text.replace('*', '')
-
-# Function to wrap text
-def wrap_text(text, max_width, font_size):
-    lines = wrap(text, width=int(max_width / font_size))
-    return '\n'.join(lines)
-
-def query(payload):
-    response = requests.post(API_URL, headers=headers, json=payload)
-    return response.content
-
-def generate_video(prompt):
-    # Generate detailed content based on the prompt using the generative model
-    response_content = model.generate_content(prompt)
-
-    # Extract the response text
-    response_text = ''.join([chunk.text for chunk in response_content])
-
-    # Use the summarization pipeline to generate a summary of the response text
-    response_summary = summarizer(response_text, max_length=1000, min_length=200, do_sample=False)
-
-    # Extract the generated summary text
-    summary_text = response_summary[0]['summary_text']
-
-    with open("summary_text.txt", "w") as file:
-        file.write(summary_text.strip())
-
-    # Read the text file
-    with open("summary_text.txt", "r") as file:
-        text = file.read()
-
-    # Split the text by , and .
-    paragraphs = re.split(r"[,.]", text)
-
-    # Create Necessary Folders
-    os.makedirs("audio", exist_ok=True)
-    os.makedirs("images", exist_ok=True)
-    os.makedirs("videos", exist_ok=True)
-
-    # Loop through each paragraph and generate an image for each
-    i = 1
-    for para in paragraphs[:-1]:
-        # Call the Hugging Face model to generate an image based on the paragraph
-        image_bytes = query({
-            "inputs": para.strip(),
-        })
-
-        # Save the image to the "images" folder
-        image = Image.open(io.BytesIO(image_bytes))
-        image.save(f"images/image{i}.jpg")
-
-        # Create gTTS instance and save to a file
-        tts = gTTS(text=para, lang='en', slow=False)
-        tts.save(f"audio/voiceover{i}.mp3")
-
-        # Load the audio file using moviepy
-        audio_clip = AudioFileClip(f"audio/voiceover{i}.mp3")
-        audio_duration = audio_clip.duration
-
-        # Load the image file using moviepy
-        image_clip = ImageClip(f"images/image{i}.jpg").set_duration(audio_duration)
-
-        # Wrap text into multiple lines
-        wrapped_text = wrap_text(para, image_clip.w, 30)
-
-        # Calculate the position dynamically based on the length of the text
-        text_height = TextClip(wrapped_text, fontsize=20, color="white").h
-        bottom_margin = 50
-        text_clip = TextClip(wrapped_text, fontsize=15, color="white", bg_color="black")
-        text_clip = text_clip.set_position(('center', image_clip.h - text_height - bottom_margin)).set_duration(audio_duration)
-        text_clip = text_clip.crossfadein(1).crossfadeout(1)
-
-        # Use moviepy to create a final video by concatenating
-        clip = image_clip.set_audio(audio_clip)
-        video = CompositeVideoClip([clip, text_clip])
-
-        # Save the final video to a file
-        video = video.write_videofile(f"videos/video{i}.mp4", fps=24)
-        i += 1
-
-    # Concatenate all the clips to create a final video
-    clips = []
-    l_files = os.listdir("videos")
-    for file in l_files:
-        clip = VideoFileClip(f"videos/{file}")
-        clips.append(clip)
-
-    final_video = concatenate_videoclips(clips, method="compose")
-    final_video = final_video.write_videofile("final_video.mp4")
-
-    return "final_video.mp4", summary_text
-
-
-# Interface
-iface = gr.Interface(
-    fn=generate_video,
-    inputs="text",
-    outputs=["video", "text"],
-    title="VideoGen Model",
-    description="Generate a video based on a prompt.",
-    examples=[["Explain Photosynthesis"]],
-    theme="ParityError/Interstellar"
+from moviepy.editor import (
+    AudioFileClip,
+    CompositeVideoClip,
+    ImageClip,
+    TextClip,
+    concatenate_videoclips,
 )
-iface.launch()
+
+load_dotenv()
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+EDGE_TTS_VOICE = os.getenv("EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
+SUBTITLE_FONT = os.getenv("SUBTITLE_FONT", "")
+
+SD_API_URL = os.getenv(
+    "SD_API_URL",
+    "https://api-inference.huggingface.co/models/CompVis/stable-diffusion-v1-4",
+)
+
+WIDTH = 720
+HEIGHT = 1280
+FPS = 24
+OUTPUT_DIR = Path("outputs")
+IMAGE_DIR = OUTPUT_DIR / "images"
+AUDIO_DIR = OUTPUT_DIR / "audio"
+FINAL_VIDEO = OUTPUT_DIR / "final_video.mp4"
+
+
+def check_config():
+    missing = []
+    if not GOOGLE_API_KEY:
+        missing.append("GOOGLE_API_KEY")
+    if not HF_TOKEN:
+        missing.append("HF_TOKEN")
+    if missing:
+        raise RuntimeError(
+            "Missing environment variables: " + ", ".join(missing) + ". Copy .env.example to .env first."
+        )
+
+
+def reset_outputs():
+    if OUTPUT_DIR.exists():
+        shutil.rmtree(OUTPUT_DIR)
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def generate_scenes(topic: str):
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model = genai.GenerativeModel(GEMINI_MODEL)
+
+    prompt = f"""
+你正在制作一个简单的短视频。根据下面的主题生成 5 个连续分镜。
+每个分镜只需要 1-2 句简短中文旁白，并给出一个对应的英文文生图 Prompt。
+不要输出标题、Markdown 或额外说明。
+严格按下面格式逐行输出：
+旁白文本 ||| English image prompt
+
+主题：{topic}
+""".strip()
+
+    response = model.generate_content(prompt)
+    text = response.text.strip()
+
+    scenes = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"^\s*\d+[\.、\)）:-]?\s*", "", raw_line).strip()
+        if not line:
+            continue
+
+        if "|||" in line:
+            narration, image_prompt = line.split("|||", 1)
+        else:
+            narration = line
+            image_prompt = line
+
+        narration = narration.strip()
+        image_prompt = image_prompt.strip()
+        if narration:
+            scenes.append({"narration": narration, "image_prompt": image_prompt})
+
+    if not scenes:
+        raise RuntimeError("The LLM did not return usable scenes. Please try another topic.")
+
+    return scenes[:5]
+
+
+def generate_image(prompt: str, output_path: Path):
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    response = requests.post(
+        SD_API_URL,
+        headers=headers,
+        json={"inputs": prompt},
+        timeout=180,
+    )
+    response.raise_for_status()
+
+    try:
+        image = Image.open(io.BytesIO(response.content)).convert("RGB")
+    except Exception as exc:
+        raise RuntimeError("Stable Diffusion did not return a valid image.") from exc
+
+    image.save(output_path, quality=95)
+
+
+async def _save_tts(text: str, output_path: Path):
+    communicator = edge_tts.Communicate(text=text, voice=EDGE_TTS_VOICE)
+    await communicator.save(str(output_path))
+
+
+def generate_tts(text: str, output_path: Path):
+    asyncio.run(_save_tts(text, output_path))
+
+
+def fit_vertical(image_path: Path, duration: float):
+    clip = ImageClip(str(image_path)).set_duration(duration)
+    clip = clip.resize(height=HEIGHT)
+    if clip.w < WIDTH:
+        clip = clip.resize(width=WIDTH)
+    return clip.crop(
+        x_center=clip.w / 2,
+        y_center=clip.h / 2,
+        width=WIDTH,
+        height=HEIGHT,
+    )
+
+
+def make_subtitle(text: str, duration: float):
+    kwargs = {
+        "txt": text,
+        "fontsize": 36,
+        "color": "white",
+        "bg_color": "black",
+        "method": "caption",
+        "size": (WIDTH - 80, None),
+        "align": "center",
+    }
+    if SUBTITLE_FONT:
+        kwargs["font"] = SUBTITLE_FONT
+
+    return (
+        TextClip(**kwargs)
+        .set_duration(duration)
+        .set_position(("center", HEIGHT - 260))
+    )
+
+
+def generate_video(topic: str):
+    topic = topic.strip()
+    if not topic:
+        raise gr.Error("请输入一个主题或几个内容要点。")
+
+    check_config()
+    reset_outputs()
+    scenes = generate_scenes(topic)
+
+    clips = []
+    try:
+        for index, scene in enumerate(scenes, start=1):
+            image_path = IMAGE_DIR / f"scene_{index}.jpg"
+            audio_path = AUDIO_DIR / f"scene_{index}.mp3"
+
+            generate_image(scene["image_prompt"], image_path)
+            generate_tts(scene["narration"], audio_path)
+
+            audio_clip = AudioFileClip(str(audio_path))
+            image_clip = fit_vertical(image_path, audio_clip.duration)
+            subtitle_clip = make_subtitle(scene["narration"], audio_clip.duration)
+
+            scene_clip = CompositeVideoClip(
+                [image_clip, subtitle_clip],
+                size=(WIDTH, HEIGHT),
+            ).set_audio(audio_clip)
+            clips.append(scene_clip)
+
+        final_clip = concatenate_videoclips(clips, method="compose")
+        final_clip.write_videofile(
+            str(FINAL_VIDEO),
+            fps=FPS,
+            codec="libx264",
+            audio_codec="aac",
+        )
+        final_clip.close()
+    finally:
+        for clip in clips:
+            clip.close()
+
+    scene_preview = "\n\n".join(
+        f"分镜 {i}: {scene['narration']}\n图片 Prompt: {scene['image_prompt']}"
+        for i, scene in enumerate(scenes, start=1)
+    )
+    return str(FINAL_VIDEO), scene_preview
+
+
+demo = gr.Interface(
+    fn=generate_video,
+    inputs=gr.Textbox(
+        label="主题 / 内容要点",
+        lines=4,
+        placeholder="例如：用 1 分钟介绍为什么天空是蓝色的",
+    ),
+    outputs=[
+        gr.Video(label="生成视频"),
+        gr.Textbox(label="分镜预览", lines=12),
+    ],
+    title="AutoVideo - AIGC 短视频生成工具",
+    description="输入主题，自动生成分镜、Stable Diffusion 图片、Edge-TTS 配音和 9:16 短视频。",
+)
+
+
+if __name__ == "__main__":
+    demo.launch()
