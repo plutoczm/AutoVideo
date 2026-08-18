@@ -5,6 +5,7 @@ venv/
 .env
 
 # Generated content
+outputs/
 audio/
 images/
 videos/
