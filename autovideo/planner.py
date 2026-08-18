@@ -6,13 +6,14 @@ import requests
 
 
 SYSTEM_PROMPT = """You are a short-form film storyboard planner.
-Return strict JSON only. Build an ORIGINAL story suitable for TikTok/YouTube Shorts.
-Do not use copyrighted character names, logos, or copied dialogue. If the user references a known franchise,
-translate the request into generic visual traits and an original cast.
+Return strict JSON only. Build an ORIGINAL story suitable for Douyin/TikTok/YouTube Shorts.
+Do not use copyrighted character names, logos, exact costumes, or copied dialogue. If the user references a known franchise,
+translate the request into broad genre/visual traits and an original cast.
 
 Schema:
 {
   "title": "...",
+  "hook_text": "a very short opening hook shown/spoken in the first seconds",
   "style_prompt": "consistent visual style shared by every shot",
   "negative_prompt": "...",
   "characters": [
@@ -26,8 +27,10 @@ Schema:
   "scenes": [
     {
       "id": "scene_01",
-      "narration": "1-3 concise Chinese sentences",
-      "dialogue": "optional short dialogue",
+      "narration": "0-2 concise Chinese sentences",
+      "dialogue_lines": [
+        {"character_id": "char_1", "text": "short spoken line"}
+      ],
       "character_ids": ["char_1"],
       "image_prompt": "English cinematic keyframe prompt",
       "motion_prompt": "English image-to-video motion/camera prompt",
@@ -38,10 +41,13 @@ Schema:
 
 Rules:
 - 6 to 10 scenes for a 45-90 second short video.
+- The first scene must hook immediately; introduce conflict, danger, surprise, or a strong question within the first 2-3 seconds.
+- Use dialogue when it improves drama. Keep 0-3 dialogue lines per scene and always attach a valid character_id.
+- Keep narration concise so the visuals can breathe.
 - Maintain character identity, clothes and color palette across scenes.
 - Make prompts cinematic: composition, lighting, lens/camera angle, environment, action.
 - motion_prompt should describe restrained coherent movement and camera motion, not a new scene.
-- narration should tell a complete micro-story with hook, development, climax and ending.
+- Build a complete micro-story with hook, escalation, climax and a satisfying ending or cliffhanger.
 """
 
 
@@ -56,6 +62,29 @@ def _extract_json(text: str) -> dict[str, Any]:
     if start < 0 or end < start:
         raise ValueError("LLM response does not contain JSON")
     return json.loads(text[start : end + 1])
+
+
+def _normalize_dialogue(project: dict[str, Any]) -> None:
+    valid_ids = {c.get("id") for c in project.get("characters", []) if c.get("id")}
+    for scene in project.get("scenes", []):
+        lines = scene.get("dialogue_lines") or []
+        normalized = []
+        for item in lines:
+            if not isinstance(item, dict):
+                continue
+            character_id = str(item.get("character_id", "")).strip()
+            text = str(item.get("text", "")).strip()
+            if character_id in valid_ids and text:
+                normalized.append({"character_id": character_id, "text": text})
+        scene["dialogue_lines"] = normalized
+
+        # Backward compatibility for older saved storyboards.
+        if not normalized and scene.get("dialogue"):
+            ids = scene.get("character_ids") or []
+            if ids and ids[0] in valid_ids:
+                scene["dialogue_lines"] = [
+                    {"character_id": ids[0], "text": str(scene["dialogue"]).strip()}
+                ]
 
 
 def plan_story(source: str) -> dict[str, Any]:
@@ -89,8 +118,10 @@ def plan_story(source: str) -> dict[str, Any]:
     if not project.get("scenes"):
         raise ValueError("Storyboard has no scenes")
     project.setdefault("characters", [])
+    project.setdefault("hook_text", project.get("title", ""))
     project.setdefault("style_prompt", "cinematic anime-inspired illustration, consistent character design")
     project.setdefault("negative_prompt", "low quality, blurry, deformed hands, extra fingers, text, watermark")
+    _normalize_dialogue(project)
     return project
 
 
