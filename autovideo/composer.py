@@ -47,6 +47,36 @@ def has_audio(path: str | Path) -> bool:
     return bool(result.stdout.strip())
 
 
+def concat_audio(audio_paths: list[str | Path], output_path: str | Path) -> Path:
+    """Concatenate TTS segments into one scene track with FFmpeg."""
+    if not audio_paths:
+        raise ValueError("audio_paths must not be empty")
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if len(audio_paths) == 1:
+        _run([
+            "ffmpeg", "-y", "-i", str(audio_paths[0]),
+            "-c:a", "libmp3lame", "-q:a", "2", str(output_path),
+        ])
+        return output_path
+
+    args = ["ffmpeg", "-y"]
+    for path in audio_paths:
+        args += ["-i", str(path)]
+    inputs = "".join(f"[{index}:a]" for index in range(len(audio_paths)))
+    filter_complex = f"{inputs}concat=n={len(audio_paths)}:v=0:a=1[outa]"
+    args += [
+        "-filter_complex", filter_complex,
+        "-map", "[outa]",
+        "-c:a", "libmp3lame",
+        "-q:a", "2",
+        str(output_path),
+    ]
+    _run(args)
+    return output_path
+
+
 def render_scene(
     visual_path: str | Path,
     audio_path: str | Path,
@@ -85,7 +115,7 @@ def render_scene(
     if has_audio(visual_path):
         args = base + [
             "-filter_complex",
-            "[0:a]volume=0.22[amb];[1:a]volume=1.0[voice];[amb][voice]amix=inputs=2:duration=longest:dropout_transition=2[mix]",
+            "[0:a]volume=0.20[amb];[1:a]volume=1.0[voice];[amb][voice]amix=inputs=2:duration=longest:dropout_transition=2[mix]",
             "-vf",
             vf,
             "-map",
@@ -221,7 +251,7 @@ def concat_and_subtitle(
             "-i",
             str(temp),
             "-vf",
-            f"subtitles='{subtitle_path}':force_style='FontSize=16,Outline=2,Alignment=2,MarginV=90'",
+            f"subtitles='{subtitle_path}':force_style='FontSize=26,Outline=3,Shadow=1,Alignment=2,MarginV=110'",
             "-c:v",
             "libx264",
             "-crf",
@@ -233,4 +263,37 @@ def concat_and_subtitle(
             str(output_path),
         ]
     )
+    return output_path
+
+
+def add_bgm(
+    input_video: str | Path,
+    bgm_path: str | Path,
+    output_path: str | Path,
+    *,
+    volume: float = 0.12,
+) -> Path:
+    """Loop a user-supplied BGM track under the finished voice/ambience mix."""
+    input_video = Path(input_video)
+    bgm_path = Path(bgm_path)
+    output_path = Path(output_path)
+    if not bgm_path.exists():
+        raise FileNotFoundError(bgm_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    _run([
+        "ffmpeg", "-y",
+        "-i", str(input_video),
+        "-stream_loop", "-1", "-i", str(bgm_path),
+        "-filter_complex",
+        f"[0:a]volume=1.0[main];[1:a]volume={volume:.3f}[bgm];[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[mix]",
+        "-map", "0:v:0",
+        "-map", "[mix]",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        "-movflags", "+faststart",
+        str(output_path),
+    ])
     return output_path
