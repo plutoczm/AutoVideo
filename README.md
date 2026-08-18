@@ -4,18 +4,16 @@ Creator-oriented AIGC story-to-video pipeline for producing vertical short films
 
 `main` is the continuously upgraded creator version. The original beginner demo is preserved on the `legacy/demo` branch.
 
-## Product goal
+## Product workflow
 
-AutoVideo is not designed as an AI slideshow maker. The project follows a creator workflow in which AI generates candidates and the user approves the visual identity and shots that are worth rendering.
+AutoVideo is not an AI slideshow maker. It uses a human-in-the-loop creator workflow so weak generations can be rejected before expensive video rendering.
 
 ```text
 Story / novel excerpt / content idea
         ↓
-LLM story adaptation
+Gemini / Doubao / DeepSeek storyboard planning
         ↓
 Character bible + stable voice roles
-        ↓
-Storyboard / shot plan
         ↓
 3x character candidates → human approval
         ↓
@@ -25,7 +23,7 @@ Storyboard / shot plan
         ↓
 Narration + per-character dialogue TTS
         ↓
-Native ambience + optional BGM mix
+Native ambience + optional BGM
         ↓
 Line-level subtitles + FFmpeg composition
         ↓
@@ -34,56 +32,115 @@ Line-level subtitles + FFmpeg composition
 
 For public demos, use original characters/stories or material you have permission to adapt.
 
-## Why human review is built in
+## Provider architecture
 
-High-quality story video generation is mostly an iteration problem. A fully automatic pipeline tends to accept weak faces, broken hands, identity drift, bad staging and poor motion. AutoVideo therefore treats **candidate generation + selection** as part of the product rather than a manual workaround.
+LLM and media providers are configured independently. This lets you use one provider end to end or mix providers for cost/quality comparisons.
 
-The current creator workflow supports:
+### LLM providers
 
-- persistent project state under one episode directory;
-- editable storyboard JSON before expensive media generation;
-- multiple character-sheet candidates per character;
-- approved reference images reused across scene generation;
-- multiple keyframe candidates per scene;
-- up to three selected character references supplied to supported image providers;
-- multiple I2V candidates per scene;
-- scene-level rerendering instead of restarting the whole episode;
-- structured `dialogue_lines` with a stable voice role per character;
-- finer subtitle timing from narration/dialogue segments;
-- native ambience preservation plus optional user-supplied BGM;
-- final H.264/AAC vertical MP4 composition.
+`LLM_PROVIDER` supports:
 
-## Current architecture
+- `doubao` — Volcengine Ark Responses API, default model `doubao-seed-2-1-turbo-260628`;
+- `gemini` — Gemini API, default model `gemini-3.6-flash`;
+- `deepseek` — DeepSeek API, current default model `deepseek-v4-flash`.
 
-### Story planning
+Legacy DeepSeek model names `deepseek-chat` / `deepseek-reasoner` are no longer used by this project.
 
-`autovideo/planner.py` converts an idea or novel excerpt into structured JSON containing:
+### Media providers
 
-- original character definitions;
-- stable face / hair / wardrobe / color descriptions;
-- voice roles;
-- a short opening hook;
-- 6-10 short-form scenes;
-- keyframe prompts;
-- motion/camera prompts;
-- concise narration;
-- per-character dialogue lines.
+`MEDIA_PROVIDER` supports:
 
-Example dialogue representation:
+- `doubao` — Seedream image generation + Seedance image-to-video;
+- `gemini` — Gemini image generation + Veo image-to-video;
+- `comfy` — local/exported ComfyUI workflows for open-model experiments.
 
-```json
-{
-  "narration": "暴风中心突然亮起一道金光。",
-  "dialogue_lines": [
-    {"character_id": "char_1", "text": "那不是闪电。"},
-    {"character_id": "char_2", "text": "海图上根本没有那座岛。"}
-  ]
-}
+Current defaults:
+
+```text
+Doubao image: doubao-seedream-5-0-lite-260128
+Doubao video: doubao-seedance-1-5-pro-251215
+Gemini image: gemini-3.1-flash-image
+Gemini video: veo-3.1-lite-generate-preview
 ```
 
-### Creator project state
+Model IDs live in `.env`, so providers can be upgraded without rewriting the orchestration layer.
 
-`autovideo/project_store.py` keeps generated assets and approvals under a project directory:
+## Free-first configuration
+
+The repository defaults to the simplest current trial path: **one Volcengine Ark key for LLM + image + video**, plus Edge-TTS for speech.
+
+```text
+LLM_PROVIDER=doubao
+MEDIA_PROVIDER=doubao
+
+ARK_API_KEY=your_volcengine_ark_key
+DOUBAO_LLM_MODEL=doubao-seed-2-1-turbo-260628
+DOUBAO_IMAGE_MODEL=doubao-seedream-5-0-lite-260128
+DOUBAO_VIDEO_MODEL=doubao-seedance-1-5-pro-251215
+
+TTS_PROVIDER=edge
+```
+
+This is the recommended first-run setup because Volcengine currently advertises trial quotas for Doubao Seed 2.1, Seedream and Seedance. The same `ARK_API_KEY` is used by all three adapters. Free quotas/model activation are account-specific and can change, so check the Ark console before batch generation.
+
+### Free Gemini LLM + Doubao media
+
+Gemini is also supported as the storyboard LLM. Gemini 3.6 Flash currently has a Gemini API free tier for text input/output:
+
+```text
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_google_ai_studio_key
+GEMINI_LLM_MODEL=gemini-3.6-flash
+
+MEDIA_PROVIDER=doubao
+ARK_API_KEY=your_volcengine_ark_key
+```
+
+This uses Gemini only for story planning while still using the Doubao trial path for image/video generation.
+
+### Optional DeepSeek fallback
+
+```text
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your_deepseek_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+```
+
+DeepSeek is kept as a low-cost optional provider, not the free-first default.
+
+### Optional Gemini media path
+
+```text
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_google_ai_studio_key
+GEMINI_LLM_MODEL=gemini-3.6-flash
+
+MEDIA_PROVIDER=gemini
+GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
+GEMINI_VIDEO_MODEL=veo-3.1-lite-generate-preview
+GEMINI_VIDEO_RESOLUTION=720p
+GEMINI_VIDEO_DURATION=8
+```
+
+The Gemini image/video path remains supported for quality comparison, but Veo API video generation currently requires a paid Gemini API tier; it is therefore not the default free-first media path.
+
+### Local no-API media path
+
+If you already have a suitable GPU and model weights:
+
+```text
+MEDIA_PROVIDER=comfy
+COMFYUI_URL=http://127.0.0.1:8188
+COMFY_IMAGE_WORKFLOW=workflows/image_api.json
+COMFY_VIDEO_WORKFLOW=workflows/video_api.json
+```
+
+API cost is zero, but local GPU time/VRAM and model downloads are your responsibility.
+
+## Creator project state
+
+Each episode is persisted so one weak scene can be regenerated without restarting the whole project.
 
 ```text
 outputs/projects/episode-01/
@@ -99,98 +156,60 @@ outputs/projects/episode-01/
 ├── motion/
 │   └── scene_01/
 ├── audio/
-│   └── scene_01/
-│       ├── segment_01.mp3
-│       └── segment_02.mp3
 ├── scenes/
 └── final/
-    ├── final_story_no_bgm.mp4
     └── final_story.mp4
 ```
 
-`selections.json` records the approved character image, keyframe and motion candidate for every item.
+`selections.json` records approved character references, keyframes and motion candidates.
 
-### Media providers
+When `MEDIA_PROVIDER=doubao`, Seedream-generated keyframes also keep a small `.source_url` sidecar used as the first-frame URL for Seedance I2V. If that provider-hosted URL expires before motion generation, regenerate the selected keyframe and then request the I2V candidate again.
 
-Two media paths are currently supported:
+## Character consistency
 
-- `MEDIA_PROVIDER=gemini`: Gemini image generation + Veo image-to-video;
-- `MEDIA_PROVIDER=comfy`: exported ComfyUI workflows for local/open-model experimentation.
+Character consistency is treated as a pipeline constraint rather than a prompt-only feature:
 
-The Python orchestration is model-agnostic. ComfyUI workflows can therefore be changed without rewriting story planning, review state, TTS or editing code.
+1. the LLM creates one stable `visual_bible` per character;
+2. multiple character candidates are generated;
+3. the creator locks one identity reference;
+4. scene keyframes reuse approved character references;
+5. prompts preserve face, hair, wardrobe and palette while varying staging;
+6. I2V starts from an approved keyframe and asks for restrained motion rather than a new scene.
 
-### Character consistency
-
-Character consistency is handled as a pipeline constraint instead of relying only on text prompts:
-
-1. LLM produces one stable `visual_bible` per character.
-2. Several character reference candidates are generated.
-3. The creator approves one reference image.
-4. Scene keyframes reuse approved reference assets.
-5. Prompts explicitly preserve face, hair, wardrobe and palette while varying only composition/staging.
-6. I2V prompts are constrained to preserve the approved keyframe rather than invent a new scene.
-
-The exact identity-control mechanism depends on the selected provider. Gemini can use multiple reference images; ComfyUI can host IP-Adapter / PuLID / InstantID / StoryDiffusion-style workflows.
-
-### Voice and sound
-
-- Edge-TTS is the default no-cost fallback.
-- `TTS_PROVIDER=http` can target a higher-quality CosyVoice/F5-TTS-compatible service.
-- Narration uses the narrator voice role; each `dialogue_lines` item resolves to the corresponding character voice.
-- Scene speech is synthesized in segments, concatenated, and reused for subtitle timing.
-- If a generated video contains native ambience/effects, FFmpeg keeps it quietly underneath the controlled voice track.
-- Final render can optionally loop a creator-supplied BGM track under the finished voice/ambience mix.
+The exact identity-control mechanism depends on the provider. Gemini and Seedream accept reference images; ComfyUI can host IP-Adapter / PuLID / InstantID / StoryDiffusion-style workflows.
 
 ## Creator Review UI
 
-The recommended way to work on publishable episodes is the staged Gradio review app:
+For publishable work, use the staged Gradio UI:
 
 ```bash
 python review_app.py
 ```
 
-The UI has five stages:
+Stages:
 
-1. **Storyboard** — create/load the episode, directly edit JSON, then save revised dialogue/prompts before media generation.
-2. **Character Bible** — generate multiple character candidates and lock the chosen reference.
-3. **Storyboard Keyframes** — generate multiple scene compositions using approved character references.
-4. **I2V Shot Review** — generate and preview multiple motion candidates for the approved keyframe.
-5. **Final Render** — run per-character TTS, preserve native ambience, optionally add BGM, burn subtitles and produce the final vertical MP4.
+1. **Storyboard** — create/load/edit structured story JSON;
+2. **Character Bible** — generate and approve character reference candidates;
+3. **Storyboard Keyframes** — generate and approve scene compositions;
+4. **I2V Shot Review** — generate and preview motion candidates;
+5. **Final Render** — per-character TTS, ambience/BGM, subtitles and 9:16 MP4.
 
-The first candidate is stored as a temporary default so rapid experiments can continue, but publishable work should explicitly review each important character and scene.
+The automatic CLI remains available for quick smoke tests:
 
-## First episode brief
+```bash
+python studio.py "一个原创海上冒险故事：年轻航海士在暴风雨中发现一座发光的失落岛屿"
+```
 
-A ready-to-use original episode brief is included at:
+## First episode
+
+The repository includes the original 45–60 second test episode **《潮汐之眼》**:
 
 ```text
 examples/episode_01_story.txt
+examples/episode_01_storyboard.json
 ```
 
-It describes a 45-60 second original cinematic-anime sea adventure called **《潮汐之眼》**, including character constraints, hook, plot beats, visual palette, sound requirements and continuity rules. It is intentionally original so it can be used as a public portfolio/creator test without relying on a named franchise.
-
-Recommended first production run:
-
-```text
-1. python review_app.py
-2. paste examples/episode_01_story.txt into Storyboard input
-3. generate Storyboard and manually tighten dialogue/pacing
-4. approve one character identity per role
-5. approve one keyframe per scene
-6. generate 2 I2V candidates for important scenes
-7. add a licensed/owned BGM file if desired
-8. render final_story.mp4
-```
-
-## Quick CLI
-
-`studio.py` remains available as the automatic end-to-end path for quick experiments:
-
-```bash
-python studio.py "一个原创海上冒险故事：年轻航海士在暴风雨中发现一座会发光的失落岛屿"
-```
-
-For creator-quality work, prefer `review_app.py` because it avoids blindly accepting first generations.
+See `docs/FIRST_EPISODE.md` for the production runbook and acceptance criteria.
 
 ## Installation
 
@@ -208,90 +227,63 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Install `ffmpeg` and `ffprobe` separately and make sure both commands are available on `PATH`.
+Install `ffmpeg` and `ffprobe` separately and ensure both are on `PATH`.
 
-## Configuration
+Then:
 
 ```bash
 cp .env.example .env
+# Add ARK_API_KEY for the default free-first path.
+python -m autovideo.preflight
+python review_app.py
 ```
 
-Default cloud creator path:
-
-```text
-LLM_API_KEY=...
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
-
-MEDIA_PROVIDER=gemini
-GEMINI_API_KEY=...
-GEMINI_IMAGE_MODEL=gemini-3.1-flash-image-preview
-GEMINI_VIDEO_MODEL=veo-3.1-fast-generate-preview
-GEMINI_VIDEO_RESOLUTION=720p
-GEMINI_VIDEO_DURATION=8
-
-VIDEO_WIDTH=1080
-VIDEO_HEIGHT=1920
-```
-
-Use the fast video model while iterating. Strong shots can later be rerendered with a higher-quality compatible model without changing the orchestration code.
-
-For local workflows:
-
-```text
-MEDIA_PROVIDER=comfy
-COMFYUI_URL=http://127.0.0.1:8188
-COMFY_IMAGE_WORKFLOW=workflows/image_api.json
-COMFY_VIDEO_WORKFLOW=workflows/video_api.json
-```
-
-See `workflows/README.md` for the API-format token convention.
+Do not commit `.env` or API keys to GitHub.
 
 ## Project structure
 
 ```text
 AutoVideo/
 ├── autovideo/
-│   ├── planner.py          # story -> characters + storyboard + dialogue lines
+│   ├── llm.py              # Doubao / Gemini / DeepSeek storyboard providers
+│   ├── planner.py          # story -> characters + storyboard + dialogue
 │   ├── project_store.py    # project assets + approvals
 │   ├── creator.py          # staged candidate/review/render pipeline
-│   ├── gemini_media.py     # Gemini image + Veo I2V provider
-│   ├── comfy.py            # model-agnostic ComfyUI adapter
+│   ├── gemini_media.py     # Gemini image + Veo I2V
+│   ├── doubao_media.py     # Seedream image + Seedance I2V
+│   ├── comfy.py            # model-agnostic local workflow adapter
 │   ├── tts.py              # Edge-TTS / HTTP high-quality TTS adapter
-│   └── composer.py         # FFmpeg audio, subtitles, BGM and final composition
+│   ├── composer.py         # FFmpeg audio, subtitles, BGM and final composition
+│   └── preflight.py        # local/provider readiness checks
 ├── examples/
-│   └── episode_01_story.txt
-├── workflows/              # optional local image/video workflows
-├── review_app.py           # creator review UI
-├── studio.py               # quick automatic CLI
+├── docs/
+├── workflows/
+├── review_app.py
+├── studio.py
 ├── requirements.txt
 ├── .env.example
-├── UPSTREAM.md
 └── README.md
 ```
 
 ## Next creator-quality milestones
 
-The next work should improve actual publishable output rather than add unrelated infrastructure:
+The next changes should be driven by real episode output rather than adding unrelated infrastructure:
 
-- direct high-quality multi-speaker CosyVoice integration instead of only the generic HTTP adapter;
-- SFX library/generation and automatic ducking/loudness normalization;
-- richer shot grammar (close-up / medium / wide / POV / insert / establishing shot);
-- explicit continuity memory for props, damage, weather and time-of-day;
-- automatic visual quality checks to flag identity drift and malformed frames before I2V;
-- alternate video providers so the same keyframe can be compared across multiple models;
-- episode metadata and reusable cast assets for a repeatable series workflow.
+- direct high-quality multi-speaker CosyVoice integration;
+- SFX generation/library and loudness/ducking controls;
+- better continuity memory for props, damage, weather and time-of-day;
+- automatic visual QA before expensive I2V;
+- provider comparison for the same approved keyframe;
+- reusable cast/style assets across episodes.
 
 ## Legacy demo
 
-The earlier learning version based on `Stable Diffusion -> Edge-TTS -> image/video composition` is preserved on:
+The original learning version based on `Stable Diffusion -> Edge-TTS -> image/video composition` is preserved on:
 
 ```text
 legacy/demo
 ```
 
-It remains useful for learning the basic pipeline, while `main` is reserved for the creator-facing system.
-
 ## Open-source provenance
 
-The repository originally started from the MIT-licensed `vasanthgitt/GenAI-Video_Generation` learning project. The current creator branch has moved to a substantially different orchestration architecture, while the original attribution remains in `UPSTREAM.md` and `LICENSE`.
+The repository originally started from the MIT-licensed `vasanthgitt/GenAI-Video_Generation` learning project. The current creator architecture is substantially different, while the original attribution remains in `UPSTREAM.md` and `LICENSE`.

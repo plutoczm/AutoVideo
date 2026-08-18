@@ -1,8 +1,7 @@
 import json
-import os
 from typing import Any
 
-import requests
+from autovideo.llm import generate_json
 
 
 SYSTEM_PROMPT = """You are a short-form film storyboard planner.
@@ -78,7 +77,6 @@ def _normalize_dialogue(project: dict[str, Any]) -> None:
                 normalized.append({"character_id": character_id, "text": text})
         scene["dialogue_lines"] = normalized
 
-        # Backward compatibility for older saved storyboards.
         if not normalized and scene.get("dialogue"):
             ids = scene.get("character_ids") or []
             if ids and ids[0] in valid_ids:
@@ -88,32 +86,8 @@ def _normalize_dialogue(project: dict[str, Any]) -> None:
 
 
 def plan_story(source: str) -> dict[str, Any]:
-    base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
-    api_key = os.getenv("LLM_API_KEY", "")
-    model = os.getenv("LLM_MODEL", "deepseek-chat")
-    if not api_key:
-        raise RuntimeError("LLM_API_KEY is required")
-
-    response = requests.post(
-        f"{base_url}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "temperature": 0.7,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": "Convert the following idea / novel excerpt into a short-film storyboard:\n\n" + source,
-                },
-            ],
-        },
-        timeout=120,
-    )
-    response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
-    project = _extract_json(content)
+    user_prompt = "Convert the following idea / novel excerpt into a short-film storyboard:\n\n" + source
+    project = _extract_json(generate_json(SYSTEM_PROMPT, user_prompt))
 
     if not project.get("scenes"):
         raise ValueError("Storyboard has no scenes")

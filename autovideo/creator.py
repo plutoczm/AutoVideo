@@ -12,6 +12,7 @@ from autovideo.composer import (
     media_duration,
     render_scene,
 )
+from autovideo.doubao_media import DoubaoMediaProvider
 from autovideo.gemini_media import GeminiMediaProvider
 from autovideo.planner import character_prompt, plan_story, scene_prompt
 from autovideo.project_store import ProjectStore
@@ -29,9 +30,9 @@ class CreatorSettings:
 
 
 def settings_from_env() -> CreatorSettings:
-    provider = os.getenv("MEDIA_PROVIDER", "gemini").lower()
-    if provider not in {"gemini", "comfy"}:
-        raise RuntimeError("MEDIA_PROVIDER must be gemini or comfy")
+    provider = os.getenv("MEDIA_PROVIDER", "doubao").lower()
+    if provider not in {"gemini", "doubao", "comfy"}:
+        raise RuntimeError("MEDIA_PROVIDER must be gemini, doubao or comfy")
     return CreatorSettings(
         media_provider=provider,
         image_workflow=os.getenv("COMFY_IMAGE_WORKFLOW", "workflows/image_api.json"),
@@ -55,6 +56,7 @@ class CreatorPipeline:
         self.store.ensure()
         self.cfg = settings_from_env()
         self.gemini = GeminiMediaProvider() if self.cfg.media_provider == "gemini" else None
+        self.doubao = DoubaoMediaProvider() if self.cfg.media_provider == "doubao" else None
         self.comfy = ComfyUIRunner() if self.cfg.media_provider == "comfy" else None
         if self.comfy and not Path(self.cfg.image_workflow).exists():
             raise RuntimeError(
@@ -80,6 +82,12 @@ class CreatorPipeline:
                 output_path,
                 reference_images=references or [],
             )
+        if self.doubao:
+            return self.doubao.generate_image(
+                prompt,
+                output_path,
+                reference_images=references or [],
+            )
         assert self.comfy is not None
         return self.comfy.run(
             self.cfg.image_workflow,
@@ -95,6 +103,8 @@ class CreatorPipeline:
     def _video(self, prompt: str, keyframe: Path, output_path: Path, seed: int) -> Path:
         if self.gemini:
             return self.gemini.generate_video(prompt, keyframe, output_path)
+        if self.doubao:
+            return self.doubao.generate_video(prompt, keyframe, output_path)
 
         assert self.comfy is not None
         if Path(self.cfg.video_workflow).exists():
@@ -253,7 +263,6 @@ class CreatorPipeline:
 
     @staticmethod
     def _speech_segments(scene: dict[str, Any], characters: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
-        """Return ordered (voice_role, text) segments for one scene."""
         segments: list[tuple[str, str]] = []
         narration = str(scene.get("narration", "")).strip()
         if narration:
@@ -270,7 +279,6 @@ class CreatorPipeline:
             voice = characters.get(character_id, {}).get("voice", "narrator")
             segments.append((voice, text))
 
-        # Backward compatibility with storyboards created before dialogue_lines existed.
         if not dialogue_lines:
             legacy = str(scene.get("dialogue", "")).strip()
             if legacy:

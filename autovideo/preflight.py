@@ -51,12 +51,27 @@ def run_preflight() -> list[Check]:
         _command("ffmpeg"),
         _command("ffprobe"),
         _writable_outputs(),
-        _env("LLM_API_KEY"),
-        _env("LLM_MODEL"),
     ]
 
-    provider = os.getenv("MEDIA_PROVIDER", "gemini").strip().lower()
-    checks.append(Check("MEDIA_PROVIDER", provider in {"gemini", "comfy"}, provider or "missing"))
+    llm_provider = os.getenv("LLM_PROVIDER", "doubao").strip().lower()
+    checks.append(
+        Check(
+            "LLM_PROVIDER",
+            llm_provider in {"gemini", "doubao", "deepseek"},
+            llm_provider or "missing",
+        )
+    )
+    if llm_provider == "gemini":
+        checks.extend([_env("GEMINI_API_KEY"), _env("GEMINI_LLM_MODEL")])
+    elif llm_provider == "doubao":
+        checks.extend([_env("ARK_API_KEY"), _env("DOUBAO_LLM_MODEL")])
+    elif llm_provider == "deepseek":
+        checks.extend([_env("DEEPSEEK_API_KEY"), _env("DEEPSEEK_MODEL")])
+
+    provider = os.getenv("MEDIA_PROVIDER", "doubao").strip().lower()
+    checks.append(
+        Check("MEDIA_PROVIDER", provider in {"gemini", "doubao", "comfy"}, provider or "missing")
+    )
 
     if provider == "gemini":
         checks.extend(
@@ -64,6 +79,26 @@ def run_preflight() -> list[Check]:
                 _env("GEMINI_API_KEY"),
                 _env("GEMINI_IMAGE_MODEL"),
                 _env("GEMINI_VIDEO_MODEL"),
+                Check(
+                    "Gemini video billing",
+                    True,
+                    "Veo API video generation requires Gemini paid-tier access",
+                    required=False,
+                ),
+            ]
+        )
+    elif provider == "doubao":
+        checks.extend(
+            [
+                _env("ARK_API_KEY"),
+                _env("DOUBAO_IMAGE_MODEL"),
+                _env("DOUBAO_VIDEO_MODEL"),
+                Check(
+                    "Doubao free quota",
+                    True,
+                    "trial quota depends on Ark account/model activation and remaining allowance",
+                    required=False,
+                ),
             ]
         )
     elif provider == "comfy":
