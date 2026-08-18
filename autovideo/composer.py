@@ -26,6 +26,27 @@ def media_duration(path: str | Path) -> float:
     return float(json.loads(result.stdout)["format"]["duration"])
 
 
+def has_audio(path: str | Path) -> bool:
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return bool(result.stdout.strip())
+
+
 def render_scene(
     visual_path: str | Path,
     audio_path: str | Path,
@@ -34,10 +55,11 @@ def render_scene(
     width: int = 1080,
     height: int = 1920,
 ) -> Path:
-    """Attach narration to a generated clip and normalize it for vertical delivery.
+    """Normalize a generated shot and overlay controlled narration/dialogue.
 
-    If the I2V clip is shorter than narration, FFmpeg loops it. This keeps the orchestration
-    deterministic while video-model shot length remains configurable in ComfyUI.
+    Creator-quality video providers can return native ambience, effects, dialogue or music.
+    When such audio exists, AutoVideo keeps it quietly underneath the controlled TTS track
+    instead of discarding it. Silent local I2V clips still use the TTS track directly.
     """
     duration = media_duration(audio_path)
     output_path = Path(output_path)
@@ -46,38 +68,56 @@ def render_scene(
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},fps=24,format=yuv420p"
     )
-    _run(
-        [
-            "ffmpeg",
-            "-y",
-            "-stream_loop",
-            "-1",
-            "-i",
-            str(visual_path),
-            "-i",
-            str(audio_path),
-            "-t",
-            f"{duration:.3f}",
+
+    base = [
+        "ffmpeg",
+        "-y",
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(visual_path),
+        "-i",
+        str(audio_path),
+        "-t",
+        f"{duration:.3f}",
+    ]
+
+    if has_audio(visual_path):
+        args = base + [
+            "-filter_complex",
+            "[0:a]volume=0.22[amb];[1:a]volume=1.0[voice];[amb][voice]amix=inputs=2:duration=longest:dropout_transition=2[mix]",
+            "-vf",
+            vf,
+            "-map",
+            "0:v:0",
+            "-map",
+            "[mix]",
+        ]
+    else:
+        args = base + [
             "-vf",
             vf,
             "-map",
             "0:v:0",
             "-map",
             "1:a:0",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "medium",
-            "-crf",
-            "18",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-shortest",
-            str(output_path),
         ]
-    )
+
+    args += [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "18",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-shortest",
+        str(output_path),
+    ]
+    _run(args)
     return output_path
 
 
